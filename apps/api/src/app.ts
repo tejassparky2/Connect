@@ -20,6 +20,7 @@ import { notificationsRouter } from './modules/notifications.routes';
 import { uploadsRouter } from './modules/uploads.routes';
 import { reportsRouter } from './modules/reports.routes';
 import { adminRouter } from './modules/admin.routes';
+import { paymentsRouter, razorpayWebhook } from './modules/payments.routes';
 
 export function createApp() {
   const app = express();
@@ -29,6 +30,7 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   const origins = env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
   app.use(cors({ origin: origins.includes('*') ? true : origins, maxAge: 600 }));
+  app.post('/pay/webhook', ...razorpayWebhook); // raw body for HMAC — before express.json()
   app.use(express.json({ limit: '200kb' }));
   if (!isTest) app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/health' } }));
   app.use(rateLimit({ windowMs: 60_000, limit: isTest ? 100_000 : 300, standardHeaders: 'draft-7', legacyHeaders: false }));
@@ -45,6 +47,8 @@ export function createApp() {
   if (env.UPLOAD_DRIVER === 'local') {
     app.use('/uploads', express.static(path.resolve(env.UPLOAD_DIR), { maxAge: isProd ? '365d' : 0, immutable: isProd, index: false, dotfiles: 'deny' }));
   }
+
+  app.use('/pay', paymentsRouter);
 
   const v1 = express.Router();
   v1.use('/auth', authRouter);

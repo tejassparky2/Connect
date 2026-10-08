@@ -11,7 +11,8 @@ import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
 import { clean } from '../services/moderation';
 import { notifyLater } from '../services/notify';
-import { createRazorpayOrder, fetchRazorpayOrderAmount, paymentsMode, verifyRazorpaySignature } from '../services/payments';
+import { createRazorpayOrder, creditWallet, fetchRazorpayOrderAmount, paymentsMode, verifyRazorpaySignature } from '../services/payments';
+import { signPaySession } from './payments.routes';
 import { env } from '../config/env';
 
 export const businessesRouter = Router();
@@ -286,8 +287,10 @@ businessesRouter.post(
     const mode = paymentsMode();
     if (mode === 'disabled') throw badRequest('Payments are not configured');
     if (mode === 'dev') return res.json({ mode, orderId: `dev_order_${Date.now()}`, amountPaise: req.body.amountPaise, currency: 'INR' });
-    const order = await createRazorpayOrder(req.body.amountPaise, `wallet_${b.id.slice(0, 8)}_${Date.now()}`);
-    res.json({ mode, orderId: order.id, amountPaise: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID });
+    const order = await createRazorpayOrder(req.body.amountPaise, `wallet_${b.id.slice(0, 8)}_${Date.now()}`, { businessId: b.id });
+    // Native apps open this hosted Razorpay Checkout page in a secure browser session.
+    const session = signPaySession({ b: b.id, u: me(req).id, o: order.id, a: order.amount });
+    res.json({ mode, orderId: order.id, amountPaise: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID, checkoutUrl: `${env.PUBLIC_BASE_URL}/pay/checkout?s=${session}` });
   },
 );
 
@@ -315,17 +318,8 @@ businessesRouter.post(
       amount = await fetchRazorpayOrderAmount(req.body.orderId); // trust the gateway, not the client, for the amount
     } else throw badRequest('Payments are not configured');
 
-    if (await prisma.walletTransaction.findUnique({ where: { reference: `pay:${req.body.paymentId}` } })) throw conflict('Payment already credited');
-    try {
-      await prisma.$transaction([
-        prisma.walletTransaction.create({ data: { businessId: b.id, type: 'TOPUP', amountPaise: amount, reference: `pay:${req.body.paymentId}`, note: 'Wallet top-up' } }),
-        prisma.business.update({ where: { id: b.id }, data: { walletPaise: { increment: amount } } }),
-      ]);
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') throw conflict('Payment already credited');
-      throw e;
-    }
-    const updated = await prisma.business.findUniqueOrThrow({ where: { id: b.id }, select: { walletPaise: true } });
-    res.json({ ok: true, balancePaise: updated.walletPaise });
+    const credited = await creditWallet(b.id, req.body.paymentId, amount);
+    if (credited.duplicate) throw conflict('Payment already credited');
+    res.json({ ok: true, balancePaise: credited.balancePaise });
   },
 );

@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "Mohalla Connect",
+    "slug": "mohalla-connect",
+    "scheme": "mohalla",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F766E"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "in.mohallaconnect.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Mohalla Connect uses your location to verify that you live in your neighbourhood and to show posts, shops and services near your home.",
+        "NSPhotoLibraryUsageDescription": "Choose photos to add to your posts and listings.",
+        "NSCameraUsageDescription": "Take photos for your posts and listings."
+      }
+    },
+    "android": {
+      "package": "in.mohallaconnect.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0F766E"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Mohalla Connect uses your location to verify that you live in your neighbourhood."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose photos to add to your posts and listings."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0F766E"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#0F766E"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

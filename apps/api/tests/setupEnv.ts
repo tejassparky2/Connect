@@ -14,3 +14,4 @@ process.env.UPLOAD_DIR = './tests/.uploads';
 process.env.PUSH_ENABLED = 'false';
 process.env.RAZORPAY_KEY_ID = '';
 process.env.RAZORPAY_KEY_SECRET = '';
+process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_test_secret';

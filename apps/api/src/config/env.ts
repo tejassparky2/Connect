@@ -32,6 +32,7 @@ const schema = z.object({
   S3_PUBLIC_URL: z.string().optional().default(''),
   RAZORPAY_KEY_ID: z.string().optional().default(''),
   RAZORPAY_KEY_SECRET: z.string().optional().default(''),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(''),
   EXPO_ACCESS_TOKEN: z.string().optional().default(''),
   PUSH_ENABLED: bool,
   /** Passing GPS checks needed to reach LOCATION level, and the min gap between them. */
