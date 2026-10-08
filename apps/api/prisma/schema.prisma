@@ -1,0 +1,954 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Mohalla Connect — PostgreSQL + PostGIS schema
+//
+// Geospatial conventions
+//   • Every location is `geography(Point, 4326)` (WGS84 lon/lat). `geography`
+//     makes ST_DWithin / ST_Distance work in METRES on a spheroid, which is
+//     what product logic speaks ("show posts within 3 km").
+//   • Areas (neighbourhood boundaries, society compounds) are
+//     `geography(MultiPolygon, 4326)` / `geography(Polygon, 4326)`.
+//   • Prisma cannot read/write these types, so they are declared as
+//     `Unsupported(...)` and accessed only through the typed raw-SQL helpers in
+//     `src/lib/geo.ts`. GIST indexes are declared with `@@index(type: Gist)`.
+//   • Prisma refuses `create()` on models with a REQUIRED Unsupported field, so
+//     point columns on writable models are optional here; NOT NULL is enforced
+//     at COMMIT by deferred constraint triggers (migration
+//     *_integrity_constraints). Rows are created as `create + setPoint` inside a
+//     single transaction (see `createWithPoint` in src/lib/geo.ts).
+//
+// Privacy conventions
+//   • `User.homeLocation` is the precise verified home pin. It is NEVER
+//     returned by the API. Feeds use it server-side as the query centre.
+//   • `Post.location` is the author's home snapped to a ~150 m grid, so a post
+//     cannot be used to pinpoint someone's flat.
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+/// Platform-wide role. Society-level roles live on SocietyMembership.
+enum PlatformRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+/// Monotonic trust ladder. Each level unlocks more of the product.
+///   PHONE    → can browse the neighbourhood feed (read-only)
+///   LOCATION → home pin confirmed by on-device GPS inside the geofence; can post
+///   ADDRESS  → address confirmed by RWA admin / invite code / 2 neighbour vouches;
+///              can join private society groups, vouch for others, list workers
+enum VerificationLevel {
+  PHONE
+  LOCATION
+  ADDRESS
+}
+
+enum VerificationMethod {
+  GPS
+  SOCIETY_ADMIN
+  INVITE_CODE
+  NEIGHBOR_VOUCH
+  DOCUMENT
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum NeighborhoodStatus {
+  /// Boundary imported (e.g. from OSM / ward maps) but under critical mass.
+  SEEDED
+  ACTIVE
+}
+
+enum SocietyType {
+  APARTMENT
+  GATED_COMMUNITY
+  STANDALONE_BUILDING
+  COLONY
+}
+
+enum SocietyRole {
+  RESIDENT
+  RWA_COMMITTEE
+  RWA_ADMIN
+}
+
+enum OccupancyType {
+  OWNER
+  TENANT
+  FAMILY_MEMBER
+}
+
+enum MembershipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REMOVED
+}
+
+enum PostType {
+  GENERAL
+  HOBBY
+  CLASSIFIED
+  ALERT
+  LOST_FOUND
+  RECOMMENDATION
+  EVENT
+}
+
+enum PostStatus {
+  ACTIVE
+  HIDDEN
+  REMOVED
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum ItemCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+}
+
+enum BusinessCategory {
+  CAFE
+  RESTAURANT
+  GROCERY
+  SALON
+  PHARMACY
+  CLINIC
+  GYM
+  TUTOR
+  BAKERY
+  LAUNDRY
+  ELECTRONICS
+  HARDWARE
+  BOUTIQUE
+  OTHER
+}
+
+enum ServiceSkill {
+  PLUMBER
+  ELECTRICIAN
+  CARPENTER
+  PAINTER
+  MAID
+  COOK
+  DRIVER
+  NANNY
+  AC_REPAIR
+  PEST_CONTROL
+  APPLIANCE_REPAIR
+  GARDENER
+  SECURITY_GUARD
+  TAILOR
+  OTHER
+}
+
+enum ListingStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum AdStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  PAUSED
+  EXHAUSTED
+  ENDED
+  REJECTED
+}
+
+enum AdCta {
+  CALL
+  WHATSAPP
+  VIEW_BUSINESS
+}
+
+enum AdEventType {
+  IMPRESSION
+  CLICK
+}
+
+enum WalletTxnType {
+  TOPUP
+  AD_SPEND
+  REFUND
+}
+
+enum TicketCategory {
+  PLUMBING
+  ELECTRICAL
+  LIFT
+  SECURITY
+  HOUSEKEEPING
+  PARKING
+  WATER
+  OTHER
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ParkingAlertStatus {
+  ACTIVE
+  RESOLVED
+}
+
+enum ReportTarget {
+  POST
+  COMMENT
+  USER
+  BUSINESS
+  PROVIDER
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+enum NotificationType {
+  ALERT_NEARBY
+  POST_COMMENT
+  POST_LIKE
+  MESSAGE
+  SOCIETY_NOTICE
+  SOCIETY_MEMBERSHIP
+  PARKING_ALERT
+  TICKET_UPDATE
+  VOUCH_RECEIVED
+  REVIEW_RECEIVED
+  AD_STATUS
+  SYSTEM
+}
+
+// ───────────────────────────── Identity ─────────────────────────────
+
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  /// E.164, e.g. +919876543210. The only login identifier (OTP).
+  phone             String             @unique
+  /// Subject id from the upstream OTP provider (Supabase/Firebase), if any.
+  authProviderId    String?            @unique
+  name              String?
+  avatarUrl         String?
+  bio               String?            @db.VarChar(280)
+  /// ISO-639-1: en, hi, kn, ta, te, mr, bn …
+  language          String             @default("en")
+  platformRole      PlatformRole       @default(USER)
+  verificationLevel VerificationLevel  @default(PHONE)
+  /// Verified home pin. PRIVATE — never serialised.
+  homeLocation      Unsupported("geography(Point, 4326)")?
+  neighborhoodId    String?            @db.Uuid
+  /// Feed radius chosen by the user, clamped to 2–5 km.
+  feedRadiusM       Int                @default(3000)
+  isBanned          Boolean            @default(false)
+  lastActiveAt      DateTime           @default(now())
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+
+  neighborhood       Neighborhood?        @relation(fields: [neighborhoodId], references: [id])
+  addresses          Address[]
+  sessions           Session[]
+  memberships        SocietyMembership[]  @relation("MemberUser")
+  approvedMembers    SocietyMembership[]  @relation("MemberApprover")
+  createdSocieties   Society[]            @relation("SocietyCreator")
+  posts              Post[]
+  comments           Comment[]
+  reactions          PostReaction[]
+  businesses         Business[]
+  listedProviders    ServiceProvider[]    @relation("ProviderListedBy")
+  providerProfile    ServiceProvider?     @relation("ProviderSelf")
+  reviews            Review[]
+  vouchesGiven       Vouch[]              @relation("VouchGiver")
+  vouchesReceived    Vouch[]              @relation("VouchReceiver")
+  providerVouches    ProviderVouch[]
+  notices            Notice[]
+  tickets            Ticket[]
+  ticketComments     TicketComment[]
+  parkingReports     ParkingAlert[]       @relation("ParkingReporter")
+  parkingOwnerAlerts ParkingAlert[]       @relation("ParkingOwner")
+  vehicles           Vehicle[]
+  notifications      Notification[]
+  pushTokens         PushToken[]
+  reports            Report[]
+  blocksMade         Block[]              @relation("Blocker")
+  blocksReceived     Block[]              @relation("Blocked")
+  conversationsA     Conversation[]       @relation("ConvA")
+  conversationsB     Conversation[]       @relation("ConvB")
+  messages           Message[]
+  locationChecks     LocationCheck[]
+  adEvents           AdEvent[]
+
+  @@index([neighborhoodId])
+  @@index([homeLocation], type: Gist)
+  @@map("users")
+}
+
+model OtpChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  phone      String
+  /// HMAC-SHA256(code) — the raw OTP is never stored.
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+  @@map("otp_challenges")
+}
+
+/// Refresh-token sessions with rotation + reuse detection.
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  /// Every rotation keeps the family id; reuse of a revoked token kills the family.
+  familyId   String    @db.Uuid
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("sessions")
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+model Block {
+  blockerId String   @db.Uuid
+  blockedId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@map("blocks")
+}
+
+// ───────────────────────────── Geography & verification ─────────────────────────────
+
+model Neighborhood {
+  id          String             @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String             @unique
+  city        String
+  state       String
+  pincode     String?
+  boundary    Unsupported("geography(MultiPolygon, 4326)")
+  center      Unsupported("geography(Point, 4326)")
+  status      NeighborhoodStatus @default(SEEDED)
+  memberCount Int                @default(0)
+  createdAt   DateTime           @default(now())
+
+  users     User[]
+  societies Society[]
+  posts     Post[]
+  addresses Address[]
+
+  @@index([city])
+  @@index([boundary], type: Gist)
+  @@index([center], type: Gist)
+  @@map("neighborhoods")
+}
+
+model Address {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @db.Uuid
+  neighborhoodId     String?            @db.Uuid
+  societyId          String?            @db.Uuid
+  /// Flat / house number, e.g. "B-1204"
+  unit               String
+  building           String?
+  street             String?
+  locality           String
+  city               String
+  pincode            String
+  location           Unsupported("geography(Point, 4326)")?
+  status             VerificationStatus @default(PENDING)
+  method             VerificationMethod?
+  verifiedAt         DateTime?
+  isPrimary          Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood? @relation(fields: [neighborhoodId], references: [id])
+  society      Society?      @relation(fields: [societyId], references: [id])
+  checks       LocationCheck[]
+  vouches      Vouch[]
+
+  @@index([userId])
+  @@index([location], type: Gist)
+  @@map("addresses")
+}
+
+/// One on-device GPS reading taken while claiming an address. Two passing
+/// checks at least 6 h apart (one ideally at night) upgrade to LOCATION level,
+/// which defeats "pin and leave" spoofing without any manual review.
+model LocationCheck {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  addressId  String   @db.Uuid
+  location   Unsupported("geography(Point, 4326)")
+  accuracyM  Float
+  distanceM  Float
+  passed     Boolean
+  isMocked   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address Address @relation(fields: [addressId], references: [id], onDelete: Cascade)
+
+  @@index([addressId, createdAt])
+  @@map("location_checks")
+}
+
+/// An ADDRESS-verified neighbour vouching that the vouchee lives at their address.
+model Vouch {
+  id         String   @id @default(uuid()) @db.Uuid
+  voucherId  String   @db.Uuid
+  voucheeId  String   @db.Uuid
+  addressId  String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  voucher User    @relation("VouchGiver", fields: [voucherId], references: [id], onDelete: Cascade)
+  vouchee User    @relation("VouchReceiver", fields: [voucheeId], references: [id], onDelete: Cascade)
+  address Address @relation(fields: [addressId], references: [id], onDelete: Cascade)
+
+  @@unique([voucherId, voucheeId])
+  @@index([voucheeId])
+  @@map("vouches")
+}
+
+// ───────────────────────────── Pillar 3: Societies / RWAs ─────────────────────────────
+
+model Society {
+  id               String        @id @default(uuid()) @db.Uuid
+  name             String
+  type             SocietyType   @default(APARTMENT)
+  neighborhoodId   String?       @db.Uuid
+  addressLine      String
+  city             String
+  pincode          String
+  location         Unsupported("geography(Point, 4326)")?
+  /// Optional compound polygon. If absent, a 250 m radius around `location` is the geofence.
+  boundary         Unsupported("geography(Polygon, 4326)")?
+  /// Rotating join code shared by the RWA (stored in plain; low-value, rotatable).
+  inviteCode       String        @unique
+  /// If false, a valid invite code auto-approves membership.
+  requireApproval  Boolean       @default(true)
+  /// Platform has confirmed the RWA (registration certificate) — shows a badge.
+  isVerified       Boolean       @default(false)
+  memberCount      Int           @default(0)
+  createdById      String        @db.Uuid
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  neighborhood  Neighborhood?       @relation(fields: [neighborhoodId], references: [id])
+  createdBy     User                @relation("SocietyCreator", fields: [createdById], references: [id])
+  memberships   SocietyMembership[]
+  addresses     Address[]
+  notices       Notice[]
+  tickets       Ticket[]
+  parkingAlerts ParkingAlert[]
+  vehicles      Vehicle[]
+
+  @@index([neighborhoodId])
+  @@index([location], type: Gist)
+  @@map("societies")
+}
+
+model SocietyMembership {
+  id           String           @id @default(uuid()) @db.Uuid
+  societyId    String           @db.Uuid
+  userId       String           @db.Uuid
+  role         SocietyRole      @default(RESIDENT)
+  occupancy    OccupancyType    @default(OWNER)
+  /// e.g. tower "B", flat "1204"
+  tower        String?
+  unit         String
+  status       MembershipStatus @default(PENDING)
+  approvedById String?          @db.Uuid
+  approvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  society    Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  user       User    @relation("MemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User?   @relation("MemberApprover", fields: [approvedById], references: [id])
+
+  @@unique([societyId, userId])
+  @@index([userId])
+  @@index([societyId, status])
+  @@map("society_memberships")
+}
+
+model Notice {
+  id        String    @id @default(uuid()) @db.Uuid
+  societyId String    @db.Uuid
+  authorId  String    @db.Uuid
+  title     String
+  body      String
+  category  String    @default("GENERAL")
+  isPinned  Boolean   @default(false)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([societyId, isPinned, createdAt])
+  @@map("notices")
+}
+
+/// Maintenance discussions / helpdesk tickets.
+model Ticket {
+  id          String         @id @default(uuid()) @db.Uuid
+  societyId   String         @db.Uuid
+  authorId    String         @db.Uuid
+  title       String
+  description String
+  category    TicketCategory @default(OTHER)
+  status      TicketStatus   @default(OPEN)
+  isPrivate   Boolean        @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  society  Society         @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  author   User            @relation(fields: [authorId], references: [id])
+  comments TicketComment[]
+
+  @@index([societyId, status, createdAt])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  ticketId  String   @db.Uuid
+  authorId  String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_comments")
+}
+
+model Vehicle {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  societyId String   @db.Uuid
+  /// Normalised Indian registration: uppercase, no spaces/dashes, e.g. KA01AB1234
+  number    String
+  label     String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@unique([societyId, number])
+  @@index([userId])
+  @@map("vehicles")
+}
+
+model ParkingAlert {
+  id            String             @id @default(uuid()) @db.Uuid
+  societyId     String             @db.Uuid
+  reporterId    String             @db.Uuid
+  /// Matched owner (if the vehicle is registered in this society)
+  ownerId       String?            @db.Uuid
+  vehicleNumber String
+  message       String
+  location      String?
+  status        ParkingAlertStatus @default(ACTIVE)
+  resolvedAt    DateTime?
+  createdAt     DateTime           @default(now())
+
+  society  Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  reporter User    @relation("ParkingReporter", fields: [reporterId], references: [id])
+  owner    User?   @relation("ParkingOwner", fields: [ownerId], references: [id])
+
+  @@index([societyId, status, createdAt])
+  @@map("parking_alerts")
+}
+
+// ───────────────────────────── Pillar 1: Neighbours ─────────────────────────────
+
+model Post {
+  id             String         @id @default(uuid()) @db.Uuid
+  authorId       String         @db.Uuid
+  neighborhoodId String?        @db.Uuid
+  type           PostType       @default(GENERAL)
+  title          String?
+  body           String
+  images         String[]       @default([])
+  /// Author home snapped to ~150 m grid (privacy). GIST-indexed: the feed's query key.
+  location       Unsupported("geography(Point, 4326)")?
+  status         PostStatus     @default(ACTIVE)
+  // Classifieds
+  pricePaise     Int?
+  condition      ItemCondition?
+  isSold         Boolean        @default(false)
+  // Alerts
+  severity       AlertSeverity?
+  // Hobby / events
+  hobbyTag       String?
+  eventAt        DateTime?
+  expiresAt      DateTime?
+  likeCount      Int            @default(0)
+  commentCount   Int            @default(0)
+  reportCount    Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  neighborhood Neighborhood?  @relation(fields: [neighborhoodId], references: [id])
+  comments     Comment[]
+  reactions    PostReaction[]
+
+  @@index([authorId, createdAt])
+  @@index([status, createdAt])
+  @@index([location], type: Gist)
+  @@map("posts")
+}
+
+model Comment {
+  id        String     @id @default(uuid()) @db.Uuid
+  postId    String     @db.Uuid
+  authorId  String     @db.Uuid
+  body      String     @db.VarChar(1000)
+  status    PostStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@map("comments")
+}
+
+model PostReaction {
+  postId    String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId])
+  @@map("post_reactions")
+}
+
+model Conversation {
+  id            String    @id @default(uuid()) @db.Uuid
+  /// Participants are stored ordered (userAId < userBId) so a pair maps to one row.
+  userAId       String    @db.Uuid
+  userBId       String    @db.Uuid
+  /// Optional context, e.g. the classified being discussed.
+  postId        String?   @db.Uuid
+  lastMessageAt DateTime  @default(now())
+  lastMessage   String?
+  aLastReadAt   DateTime?
+  bLastReadAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  userA    User      @relation("ConvA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB    User      @relation("ConvB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId, lastMessageAt])
+  @@index([userBId, lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @db.Uuid
+  senderId       String   @db.Uuid
+  body           String   @db.VarChar(2000)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ───────────────────────────── Pillar 2: Local commerce ─────────────────────────────
+
+model Business {
+  id           String           @id @default(uuid()) @db.Uuid
+  ownerId      String           @db.Uuid
+  name         String
+  category     BusinessCategory
+  description  String?
+  phone        String
+  whatsapp     String?
+  addressLine  String
+  pincode      String
+  location     Unsupported("geography(Point, 4326)")?
+  /// { "mon": "09:00-21:00", ... }
+  hours        Json?
+  photos       String[]         @default([])
+  gstin        String?
+  isVerified   Boolean          @default(false)
+  status       ListingStatus    @default(ACTIVE)
+  openedAt     DateTime?
+  ratingAvg    Float            @default(0)
+  ratingCount  Int              @default(0)
+  walletPaise  Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  owner         User                   @relation(fields: [ownerId], references: [id])
+  reviews       Review[]
+  announcements BusinessAnnouncement[]
+  campaigns     AdCampaign[]
+  walletTxns    WalletTransaction[]
+
+  @@index([ownerId])
+  @@index([category])
+  @@index([location], type: Gist)
+  @@map("businesses")
+}
+
+model BusinessAnnouncement {
+  id         String    @id @default(uuid()) @db.Uuid
+  businessId String    @db.Uuid
+  title      String
+  body       String
+  validUntil DateTime?
+  createdAt  DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@map("business_announcements")
+}
+
+/// Verified daily-wage / informal workers. Many don't own smartphones, so
+/// they are usually listed by a resident (`listedById`) and trust is built
+/// through vouches from ADDRESS-verified residents who employ them.
+model ServiceProvider {
+  id            String         @id @default(uuid()) @db.Uuid
+  listedById    String         @db.Uuid
+  /// Set if the worker has claimed the profile with their own phone.
+  userId        String?        @unique @db.Uuid
+  name          String
+  phone         String
+  skills        ServiceSkill[]
+  languages     String[]       @default([])
+  about         String?
+  experienceYrs Int?
+  /// Indicative rate, e.g. "₹400/visit"
+  rateNote      String?
+  location      Unsupported("geography(Point, 4326)")?
+  serviceRadiusM Int           @default(5000)
+  /// Police verification / ID check done (by platform or RWA)
+  idVerified    Boolean        @default(false)
+  vouchCount    Int            @default(0)
+  ratingAvg     Float          @default(0)
+  ratingCount   Int            @default(0)
+  status        ListingStatus  @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  listedBy User            @relation("ProviderListedBy", fields: [listedById], references: [id])
+  user     User?           @relation("ProviderSelf", fields: [userId], references: [id])
+  reviews  Review[]
+  vouches  ProviderVouch[]
+
+  @@unique([phone])
+  @@index([location], type: Gist)
+  @@map("service_providers")
+}
+
+model ProviderVouch {
+  providerId String   @db.Uuid
+  userId     String   @db.Uuid
+  note       String?  @db.VarChar(200)
+  createdAt  DateTime @default(now())
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, userId])
+  @@map("provider_vouches")
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  authorId   String   @db.Uuid
+  businessId String?  @db.Uuid
+  providerId String?  @db.Uuid
+  rating     Int
+  body       String?  @db.VarChar(1000)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  author   User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  business Business?        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  provider ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, businessId])
+  @@unique([authorId, providerId])
+  @@index([businessId, createdAt])
+  @@index([providerId, createdAt])
+  @@map("reviews")
+}
+
+/// Self-serve hyper-local ads. Budget is reserved from the business wallet at
+/// launch; impressions are billed CPM (per 1000) and de-duplicated per user/day.
+model AdCampaign {
+  id             String    @id @default(uuid()) @db.Uuid
+  businessId     String    @db.Uuid
+  headline       String    @db.VarChar(80)
+  body           String    @db.VarChar(280)
+  imageUrl       String?
+  cta            AdCta     @default(VIEW_BUSINESS)
+  /// Copied from the business at creation; the targeting centre.
+  location       Unsupported("geography(Point, 4326)")?
+  radiusM        Int       @default(3000)
+  budgetPaise    Int
+  spentPaise     Int       @default(0)
+  cpmPaise       Int       @default(5000)
+  impressions    Int       @default(0)
+  clicks         Int       @default(0)
+  status         AdStatus  @default(DRAFT)
+  rejectReason   String?
+  startAt        DateTime  @default(now())
+  endAt          DateTime
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  events   AdEvent[]
+
+  @@index([status, endAt])
+  @@index([businessId])
+  @@index([location], type: Gist)
+  @@map("ad_campaigns")
+}
+
+model AdEvent {
+  id         String      @id @default(uuid()) @db.Uuid
+  campaignId String      @db.Uuid
+  userId     String      @db.Uuid
+  type       AdEventType
+  /// UTC date, used for once-per-user-per-day dedupe.
+  day        DateTime    @db.Date
+  createdAt  DateTime    @default(now())
+
+  campaign AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId, type, day])
+  @@map("ad_events")
+}
+
+model WalletTransaction {
+  id          String        @id @default(uuid()) @db.Uuid
+  businessId  String        @db.Uuid
+  type        WalletTxnType
+  amountPaise Int
+  /// Razorpay payment id / campaign id — unique to make top-ups idempotent.
+  reference   String        @unique
+  note        String?
+  createdAt   DateTime      @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@map("wallet_transactions")
+}
+
+// ───────────────────────────── Cross-cutting ─────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Report {
+  id         String       @id @default(uuid()) @db.Uuid
+  reporterId String       @db.Uuid
+  targetType ReportTarget
+  targetId   String       @db.Uuid
+  reason     String
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt])
+  @@map("reports")
+}
