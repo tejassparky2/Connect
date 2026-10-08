@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+**/dist-e2e
+**/.env
+apps/mobile
+e2e
+.git

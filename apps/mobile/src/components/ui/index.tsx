@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View, type PressableProps, type TextInputProps } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, TextInput, View, type PressableProps, type TextInputProps } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { cssInterop } from 'nativewind';
@@ -100,7 +100,7 @@ export const Field = React.forwardRef<TextInput, TextInputProps & { label?: stri
             placeholderTextColor="#94A3B8"
             multiline={multiline}
             className={`flex-1 text-base text-ink-900 ${multiline ? 'min-h-[96px]' : 'h-12'} ${className}`}
-            style={multiline ? { textAlignVertical: 'top' } : undefined}
+            style={[multiline ? { textAlignVertical: 'top' } : null, Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null]}
             {...rest}
           />
         </View>
@@ -170,7 +170,8 @@ export function Chip({ label, selected, onPress, testID }: { label: string; sele
 }
 
 export function Card({ children, className = '', onPress, testID }: { children: React.ReactNode; className?: string; onPress?: PressableProps['onPress']; testID?: string }) {
-  const cls = `rounded-3xl bg-white p-4 ${className}`;
+  // Only apply the default background when the caller didn't pass one (later CSS classes don't reliably win).
+  const cls = `rounded-3xl p-4 ${/(^|\s)bg-/.test(className) ? '' : 'bg-white'} ${className}`;
   const shadow = { shadowColor: '#0B1220', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 };
   if (onPress)
     return (

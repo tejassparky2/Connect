@@ -23,7 +23,7 @@ export function BusinessCard({ b }: { b: Business }) {
           <Text numberOfLines={1} className="mr-1 flex-shrink text-base font-bold text-ink-900">{b.name}</Text>
           {b.isVerified ? <Icon name="checkmark-circle" size={15} color="#0F766E" /> : null}
         </View>
-        <Text className="text-xs text-ink-500">{cat.emoji} {cat.label.replace(/s$/, '')} · {formatDistance(b.distanceM)}</Text>
+        <Text className="text-xs text-ink-500">{cat.emoji} {cat.label} · {formatDistance(b.distanceM)}</Text>
         <View className="mt-1.5 flex-row items-center">
           {b.ratingCount ? (
             <>

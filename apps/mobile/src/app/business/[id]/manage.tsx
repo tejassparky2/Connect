@@ -118,7 +118,7 @@ export default function ManageBusiness() {
                 { l: 'Impressions', v: c.impressions.toLocaleString('en-IN') },
                 { l: 'Clicks', v: String(c.clicks) },
                 { l: 'CTR', v: `${c.ctr}%` },
-                { l: 'Spent', v: `${formatRupees(c.spentPaise) || '₹0'}/${formatRupees(c.budgetPaise)}` },
+                { l: 'Spent', v: formatRupees(c.spentPaise) || '₹0' },
               ].map((s) => (
                 <View key={s.l} className="flex-1">
                   <Text className="text-[15px] font-extrabold text-ink-900">{s.v}</Text>
@@ -129,7 +129,7 @@ export default function ManageBusiness() {
             <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-100">
               <View className="h-full bg-saffron-500" style={{ width: `${Math.min(100, (c.spentPaise / c.budgetPaise) * 100)}%` }} />
             </View>
-            <Text className="mt-1 text-[11px] text-ink-400">{(c.radiusM / 1000).toFixed(1)} km radius · ends {new Date(c.endAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
+            <Text className="mt-1 text-[11px] text-ink-400">{formatRupees(c.remainingPaise)} left of {formatRupees(c.budgetPaise)} · {(c.radiusM / 1000).toFixed(1)} km · ends {new Date(c.endAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
             <View className="mt-3 flex-row">
               {c.status === 'DRAFT' ? <Button testID={`launch-${c.id}`} title="Launch" size="sm" icon="rocket" className="mr-2" onPress={() => act(c, 'launch')} /> : null}
               {c.status === 'ACTIVE' ? <Button title="Pause" size="sm" variant="outline" icon="pause" className="mr-2" onPress={() => act(c, 'pause')} /> : null}

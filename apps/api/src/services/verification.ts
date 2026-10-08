@@ -44,7 +44,9 @@ export async function gpsProgress(addressId: string) {
   const passed = await prisma.locationCheck.findMany({ where: { addressId, passed: true }, select: { createdAt: true }, orderBy: { createdAt: 'asc' } });
   const spaced = countSpacedChecks(passed.map((p) => p.createdAt), env.GPS_CHECK_MIN_GAP_HOURS);
   const last = passed[passed.length - 1]?.createdAt;
-  const nextEligibleAt = last && spaced < env.GPS_CHECKS_REQUIRED ? new Date(last.getTime() + env.GPS_CHECK_MIN_GAP_HOURS * 3600_000) : null;
+  const eligible = last ? new Date(last.getTime() + env.GPS_CHECK_MIN_GAP_HOURS * 3600_000) : null;
+  // Only report a wait if it's actually in the future.
+  const nextEligibleAt = eligible && spaced < env.GPS_CHECKS_REQUIRED && eligible.getTime() > Date.now() ? eligible : null;
   return { passed: spaced, required: env.GPS_CHECKS_REQUIRED, done: spaced >= env.GPS_CHECKS_REQUIRED, nextEligibleAt };
 }
 

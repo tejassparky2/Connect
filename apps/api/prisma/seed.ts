@@ -194,7 +194,8 @@ async function main() {
   console.log('☕ Businesses…');
   const mkBiz = async (owner: string, loc: P, data: Omit<Prisma.BusinessUncheckedCreateInput, 'ownerId'>) =>
     prisma.$transaction(async (tx) => {
-      const b = await tx.business.create({ data: { ...data, ownerId: owner } });
+      // Established shops opened long ago; only explicitly new ones get the "New" badge.
+      const b = await tx.business.create({ data: { openedAt: new Date(Date.now() - 2 * 365 * 86400_000), ...data, ownerId: owner } });
       await tx.$executeRaw`UPDATE businesses SET location = ${pt(loc)} WHERE id = ${b.id}::uuid`;
       return b;
     });

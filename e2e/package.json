@@ -2,6 +2,8 @@
   "name": "@mohalla/e2e",
   "private": true,
   "scripts": {
+    "stack:up": "./run-stack.sh",
+    "stack:down": "./stop-stack.sh",
     "test": "playwright test"
   },
   "devDependencies": {

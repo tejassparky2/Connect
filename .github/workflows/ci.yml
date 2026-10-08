@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: API — typecheck + integration tests (PostGIS)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mohalla_test?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mohalla_test?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run db:generate -w apps/api
+      - run: npm run typecheck -w apps/api
+      - run: npm test -w apps/api
+      - run: npm run build -w apps/api
+
+  mobile:
+    name: Mobile — typecheck + unit tests + expo-doctor
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/mobile/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npx expo-doctor
+      - run: npx expo export --platform web --output-dir dist
+
+  e2e:
+    name: End-to-end (Playwright, web build ↔ real API ↔ PostGIS)
+    runs-on: ubuntu-latest
+    needs: [api, mobile]
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      CHROME_PATH: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: npm ci
+      - run: npm run db:generate -w apps/api
+      - run: npm ci
+        working-directory: apps/mobile
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: ./run-stack.sh
+        working-directory: e2e
+      - run: npx playwright test
+        working-directory: e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: |
+            e2e/screenshots
+            e2e/test-results

@@ -23,14 +23,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Local full-stack dev. For production set NODE_ENV=production, OTP_PROVIDER=supabase,
+    # real secrets and an explicit CORS_ORIGINS — the API refuses to boot otherwise.
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-development}
       DATABASE_URL: postgresql://postgres:postgres@db:5432/mohalla?schema=public
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-to-a-long-random-string-of-64-chars-minimum-000000}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-to-another-long-random-string-of-64-chars-min-00000}
-      OTP_PROVIDER: ${OTP_PROVIDER:-supabase}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-dev-access-secret-local-dev-access-secret-000}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-dev-refresh-secret-local-dev-refresh-secret-00}
+      OTP_SECRET: ${OTP_SECRET:-local-dev-otp-secret-0000}
+      OTP_PROVIDER: ${OTP_PROVIDER:-dev}
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:4000}
     ports:
       - "4000:4000"

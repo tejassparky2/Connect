@@ -2,7 +2,7 @@
   "name": "mohalla-connect",
   "private": true,
   "version": "1.0.0",
-  "description": "Mohalla Connect — hyper-local, verified community app for Indian neighbourhoods and housing societies",
+  "description": "Mohalla Connect \u2014 hyper-local, verified community app for Indian neighbourhoods and housing societies",
   "workspaces": [
     "apps/api"
   ],
@@ -12,7 +12,11 @@
     "api:build": "npm run build -w apps/api",
     "db:up": "docker compose up -d db",
     "db:migrate": "npm run db:migrate -w apps/api",
-    "db:seed": "npm run db:seed -w apps/api"
+    "db:seed": "npm run db:seed -w apps/api",
+    "mobile:start": "cd apps/mobile && npx expo start",
+    "mobile:web": "cd apps/mobile && npx expo start --web",
+    "e2e": "cd e2e && ./run-stack.sh && npx playwright test; ./stop-stack.sh",
+    "test": "npm run api:test && cd apps/mobile && npm test"
   },
   "engines": {
     "node": ">=20"

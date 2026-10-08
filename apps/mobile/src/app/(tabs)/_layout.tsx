@@ -19,8 +19,9 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: '#0F766E',
         tabBarInactiveTintColor: '#94A3B8',
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
-        tabBarStyle: { borderTopColor: '#F1F5F9', height: Platform.OS === 'ios' ? 88 : 64, paddingTop: 6, paddingBottom: Platform.OS === 'ios' ? 28 : 8 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', lineHeight: 15 },
+        tabBarStyle: { borderTopColor: '#F1F5F9', height: Platform.OS === 'ios' ? 88 : 70, paddingTop: 6, paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
+        tabBarLabelPosition: 'below-icon',
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: tabIcon('home-outline', 'home'), tabBarButtonTestID: 'tab-home' }} />
