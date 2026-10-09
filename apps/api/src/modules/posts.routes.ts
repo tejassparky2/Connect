@@ -292,9 +292,11 @@ postsRouter.delete('/posts/:id/like', async (req, res) => {
 postsRouter.get('/posts/:id/comments', async (req, res) => {
   const viewer = me(req).id;
   const v = await loadVisiblePost(req.params.id, viewer);
-  const blocked = await prisma.block.findMany({ where: { blockerId: viewer }, select: { blockedId: true } });
+  // Bidirectional, like the feed: hide people I blocked AND people who blocked me.
+  const blocks = await prisma.block.findMany({ where: { OR: [{ blockerId: viewer }, { blockedId: viewer }] }, select: { blockerId: true, blockedId: true } });
+  const hidden = blocks.map((b) => (b.blockerId === viewer ? b.blockedId : b.blockerId));
   const comments = await prisma.comment.findMany({
-    where: { postId: v.id, status: 'ACTIVE', authorId: { notIn: blocked.map((b) => b.blockedId) } },
+    where: { postId: v.id, status: 'ACTIVE', authorId: { notIn: hidden } },
     include: { author: { select: publicUserSelect } },
     orderBy: { createdAt: 'asc' },
     take: 200,

@@ -61,6 +61,13 @@ describe('H1/M6: cursors are sealed and validated', () => {
     }
   });
 
+  it('a correctly SEALED cursor of the wrong shape is rejected on the neighbour directory too', async () => {
+    const { sealCursor } = await import('../src/lib/pagination');
+    const u = await locationVerified('U');
+    const wrongShape = sealCursor({ d: 'not-a-number', id: 'x' });
+    expect((await u.get(`/v1/me/neighbors?cursor=${encodeURIComponent(wrongShape)}`)).status).toBe(400);
+  });
+
   it('out-of-range dates are rejected with 400', async () => {
     const u = await locationVerified('U');
     expect((await u.post('/v1/posts', { type: 'EVENT', title: 'Far future', body: 'Year 275760 party', eventAt: '+275760-09-13T00:00:00Z' })).status).toBe(400);
@@ -313,5 +320,23 @@ describe('payments (Razorpay mode, gateway HTTP mocked)', () => {
       spy.mockRestore();
       Object.assign(env, { RAZORPAY_KEY_ID: prev.id, RAZORPAY_KEY_SECRET: prev.secret });
     }
+  });
+});
+
+
+describe('Blocking hides comments in both directions', () => {
+  it("someone who blocked me can't see my comments, and I can't see theirs", async () => {
+    const author = await locationVerified('Author');
+    const a = await locationVerified('A', offset(HSR, 40, 0));
+    const b = await locationVerified('B', offset(HSR, 0, 40));
+    const p = (await author.post('/v1/posts', { type: 'GENERAL', body: 'Thread' })).body;
+    await a.post(`/v1/posts/${p.id}/comments`, { body: 'from A' });
+    await b.post(`/v1/posts/${p.id}/comments`, { body: 'from B' });
+    const bodies = async (u: TestUser) => (await u.get(`/v1/posts/${p.id}/comments`)).body.items.map((c: { body: string }) => c.body).sort();
+    expect(await bodies(a)).toEqual(['from A', 'from B']);
+    expect((await b.post(`/v1/users/${a.id}/block`)).status).toBe(200); // B blocks A
+    expect(await bodies(b)).toEqual(['from B']); // blocker no longer sees A
+    expect(await bodies(a)).toEqual(['from A']); // and A no longer sees the blocker
+    expect(await bodies(author)).toEqual(['from A', 'from B']); // uninvolved users unaffected
   });
 });

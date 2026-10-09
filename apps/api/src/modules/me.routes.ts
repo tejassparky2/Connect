@@ -14,9 +14,8 @@ import {
   getUserHome,
   isInIndia,
   setPoint,
-  type NearbyUsersCursor,
 } from '../lib/geo';
-import { openCursor, sealCursor } from '../lib/pagination';
+import { distanceCursor, openCursor, sealCursor } from '../lib/pagination';
 import { publicUserSelect, toPublicUser } from '../lib/serializers';
 import { revokeAllSessions } from '../lib/tokens';
 import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
@@ -278,7 +277,7 @@ meRouter.get(
       radiusM: clampRadius(user.feedRadiusM, 2000, 5000, 3000),
       viewerId: user.id,
       limit,
-      cursor: openCursor<NearbyUsersCursor & Record<string, unknown>>(cursor),
+      cursor: openCursor(cursor, distanceCursor), // sealed AND schema-checked
     });
     res.json({ items: result.rows, nextCursor: result.nextCursor ? sealCursor({ ...result.nextCursor }) : null });
   },

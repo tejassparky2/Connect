@@ -10,13 +10,16 @@ import { toast } from '@/lib/toast';
 import type { Me } from '@/lib/types';
 import { Button, IconButton } from '@/components/ui';
 
+/** Must match the API's per-phone resend cooldown (apps/api/src/services/otp.ts). */
+const RESEND_COOLDOWN_S = 60;
+
 export default function OtpScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ phone: string; devCode?: string; consent?: string }>();
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState(params.devCode || '');
   const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(30);
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
   const input = useRef<TextInput>(null);
   const signIn = useAuth((s) => s.signIn);
   const qc = useQueryClient();
@@ -50,7 +53,7 @@ export default function OtpScreen() {
     try {
       const r = await api.post<{ devCode?: string }>('/auth/otp/request', { phone: params.phone });
       setDevCode(r.devCode ?? '');
-      setCooldown(30);
+      setCooldown(RESEND_COOLDOWN_S);
       toast.success('OTP sent again');
     } catch (e) {
       toast.error(e);

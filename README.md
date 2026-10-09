@@ -4,7 +4,7 @@
 
 | Pillar | What you get |
 |---|---|
-| 🏡 **Neighbours** | A feed limited to a 2–5 km radius: marketplace, hobby partners, recommendations, events, lost & found, and **emergency alerts pushed to everyone within 2 km**. Also 1:1 chat and a directory of verified neighbours. |
+| 🏡 **Neighbours** | A feed limited to your neighbourhood radius (2–5 km by default; 0.5–5 km filter): marketplace, hobby partners, recommendations, events, lost & found, and **emergency alerts pushed to everyone within 2 km**. Also 1:1 chat and a directory of verified neighbours. |
 | 🏪 **Local commerce** | A directory of shops and cafés, offers from newly opened places, reviews, **resident-vouched maids, cooks, plumbers and drivers**, and **self-serve hyper-local ads** paid from a wallet (Razorpay). |
 | 🏢 **Society / RWA** | Private groups for verified residents, with geo-fenced join requests, RWA approvals, invite codes, a notice board, a maintenance helpdesk, and **parking alerts that reach the vehicle owner without sharing phone numbers**. |
 
@@ -12,12 +12,12 @@
 
 - **Mobile:** Expo SDK 57 (React Native 0.86), Expo Router, NativeWind (Tailwind), TanStack Query, Zustand, SecureStore. Runs on iOS, Android and web.
 - **API:** Node 22, Express 5, TypeScript, zod, Prisma 6.
-- **Database:** PostgreSQL 16 + **PostGIS 3.4**, with GIST-indexed `geography` columns.
+- **Database:** PostgreSQL 16 or 17 + **PostGIS 3.4/3.5** (Docker Compose uses 17-3.5; CI tests both), with GIST-indexed `geography` columns.
 - **Auth:** phone OTP through **Supabase Auth**, proxied by the API, which then issues its own JWT plus rotating refresh tokens. A `dev` provider exists for local work and is blocked in production.
 - **Payments:** Razorpay (hosted checkout and signed webhook). **Push:** Expo Push. **Images:** local disk or any S3-compatible store (S3, R2, Supabase Storage).
 
 ```
-apps/api      Express API · prisma/schema.prisma · migrations · seed · 106 integration tests
+apps/api      Express API · prisma/schema.prisma · migrations · seed · 137 integration tests
 apps/mobile   Expo app · src/app (routes) · src/components · src/lib
 e2e           Playwright end-to-end suite (web build ↔ real API ↔ PostGIS)
 docs          ARCHITECTURE.md (design, geo-scaling, verification, cold start) · API.md (endpoint blueprint)
@@ -63,14 +63,14 @@ The society invite code for Green Meadows Residency is `GREEN234`.
 
 | Command | What it covers | Result on the last run |
 |---|---|---|
-| `npm run api:test` | Vitest integration suite against a real PostGIS DB (`mohalla_test`). It includes 23 security regression tests and a 100k-resident scale test. | 135/135 on PostgreSQL 16 and 17 |
+| `npm run api:test` | Vitest integration suite against a real PostGIS DB (`mohalla_test`). It includes 25 security regression tests and a 100k-resident scale test. | 137/137 on PostgreSQL 16 and 17 |
 | `npm run test:supabase -w apps/api` | API ↔ a **real Supabase Auth (GoTrue)** server: OTP send, verify, wrong code, rate limit, IP forwarding. Needs a running GoTrue; setup is in the file header and the CI job. | 5/5 |
 | `cd apps/mobile && npm test` | Formatting unit tests plus jest-expo component tests rendered for **iOS and Android** | 5/5 + 40/40 |
 | `cd apps/mobile && npx tsc --noEmit && npx expo-doctor` | Types and Expo SDK compatibility | clean, 21/21 |
 | `npm run e2e` | Boots a seeded stack and runs Playwright through the real UI (web build → API → PostGIS) | 9/9 journeys |
 | `node e2e/load/run-load.mjs` | autocannon load test against 100k residents and 20k posts | see ARCHITECTURE §2 |
 
-The scale test puts 100,000 residents around one point. It asserts exact counts and uses `EXPLAIN` to check that every nearest-first query walks the GiST index. It also checks that keyset pagination never skips or repeats a row, even when 150 users share the identical point (more than the 64-row tie buffer). Alert fan-out must reach every recipient exactly once.
+The scale test puts 100,000 residents around one point. It asserts exact counts and uses an `EXPLAIN` assertion to check that the nearest-first users query walks the GiST index (no Seq Scan, no full Sort). It also checks that keyset pagination never skips or repeats a row, even when 150 users share the identical point (more than the 64-row tie buffer). Alert fan-out must reach every recipient exactly once.
 
 E2E journeys cover:
 - onboarding (with consent) → GPS verification → posting, liking and commenting
