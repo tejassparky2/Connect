@@ -54,6 +54,7 @@ export function Button({
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!off, busy: !!loading }}
+      disabled={!!off}
       onPress={off ? undefined : onPress}
       className={`flex-row items-center justify-center rounded-2xl ${pad} ${v.box} ${off ? 'opacity-50' : ''} ${className}`}
     >

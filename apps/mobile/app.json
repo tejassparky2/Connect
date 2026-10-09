@@ -26,6 +26,9 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -47,7 +50,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose photos to add to your posts and listings."
+          "photosPermission": "Choose photos to add to your posts and listings.",
+          "microphonePermission": false,
+          "cameraPermission": "Take photos for your posts and listings."
         }
       ],
       [
@@ -64,7 +69,8 @@
           "backgroundColor": "#0F766E"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": false
