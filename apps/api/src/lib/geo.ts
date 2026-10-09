@@ -26,6 +26,7 @@
  */
 import { Prisma, PostType } from '@prisma/client';
 import { prisma } from './prisma';
+import { likeEscape } from './validators';
 
 export interface LatLng {
   lat: number;
@@ -132,12 +133,27 @@ export async function findNeighborhoodForPoint(p: LatLng): Promise<{ id: string;
   return near[0] ?? null;
 }
 
-export async function countUsersWithin(center: LatLng, radiusM: number): Promise<number> {
+/** Exact count — SERVER-SIDE ONLY (never return it raw: see bucketCount). */
+export async function countUsersWithin(center: LatLng, radiusM: number, opts: { verifiedOnly?: boolean } = {}): Promise<number> {
+  const lvl = opts.verifiedOnly ? Prisma.sql`AND "verificationLevel" IN ('LOCATION', 'ADDRESS')` : Prisma.empty;
   const rows = await prisma.$queryRaw<{ n: bigint }[]>`
     SELECT count(*) AS n FROM users
-    WHERE "homeLocation" IS NOT NULL AND "deletedAt" IS NULL AND NOT "isBanned"
+    WHERE "homeLocation" IS NOT NULL AND "deletedAt" IS NULL AND NOT "isBanned" ${lvl}
       AND ST_DWithin("homeLocation", ${pointSql(center)}, ${radiusM}::float8)`;
   return Number(rows[0].n);
+}
+
+/**
+ * Coarse, monotone bucketing for any user count shown to clients.
+ * An exact count is a location oracle: move a disc's edge across a victim and
+ * watch the count flip 0→1 (an audit recovered a home to 0 m this way).
+ * Buckets: <10 → 0 ("fewer than 10"), then 10s, 50s, 100s.
+ */
+export function bucketCount(n: number): number {
+  if (n < 10) return 0;
+  if (n < 100) return Math.floor(n / 10) * 10;
+  if (n < 1000) return Math.floor(n / 50) * 50;
+  return Math.floor(n / 100) * 100;
 }
 
 // ─────────────────────────── Nearby users (the hard one) ───────────────────────────
@@ -339,7 +355,7 @@ export async function queryNearbyBusinessIds(opts: {
 }): Promise<{ id: string; distance: number }[]> {
   const pt = pointSql(opts.center);
   const cat = opts.category ? Prisma.sql`AND b.category = ${opts.category}::"BusinessCategory"` : Prisma.empty;
-  const q = opts.q ? Prisma.sql`AND (b.name ILIKE ${'%' + opts.q + '%'} OR b.description ILIKE ${'%' + opts.q + '%'})` : Prisma.empty;
+  const q = opts.q ? Prisma.sql`AND (b.name ILIKE ${'%' + likeEscape(opts.q) + '%'} OR b.description ILIKE ${'%' + likeEscape(opts.q) + '%'})` : Prisma.empty;
   const cur = opts.cursor
     ? Prisma.sql`AND (b.location <-> ${pt}, b.id) > (${String(opts.cursor.d)}::float8, ${opts.cursor.id}::uuid)`
     : Prisma.empty;
@@ -363,7 +379,7 @@ export async function queryNearbyProviderIds(opts: {
 }): Promise<{ id: string; distance: number }[]> {
   const pt = pointSql(opts.center);
   const skill = opts.skill ? Prisma.sql`AND ${opts.skill}::"ServiceSkill" = ANY(s.skills)` : Prisma.empty;
-  const q = opts.q ? Prisma.sql`AND s.name ILIKE ${'%' + opts.q + '%'}` : Prisma.empty;
+  const q = opts.q ? Prisma.sql`AND s.name ILIKE ${'%' + likeEscape(opts.q) + '%'}` : Prisma.empty;
   const cur = opts.cursor
     ? Prisma.sql`AND (s.location <-> ${pt}, s.id) > (${String(opts.cursor.d)}::float8, ${opts.cursor.id}::uuid)`
     : Prisma.empty;
@@ -382,7 +398,7 @@ export async function queryNearbyProviderIds(opts: {
 /** Societies near a point (for "find your society" during onboarding). */
 export async function queryNearbySocieties(center: LatLng, radiusM: number, q?: string, limit = 20) {
   const pt = pointSql(center);
-  const qc = q ? Prisma.sql`AND s.name ILIKE ${'%' + q + '%'}` : Prisma.empty;
+  const qc = q ? Prisma.sql`AND s.name ILIKE ${'%' + likeEscape(q) + '%'}` : Prisma.empty;
   return prisma.$queryRaw<{ id: string; name: string; addressLine: string; city: string; isVerified: boolean; memberCount: number; type: string; distance: number }[]>`
     SELECT s.id, s.name, s."addressLine", s.city, s."isVerified", s."memberCount", s.type::text AS type,
            ST_Distance(s.location, ${pt}) AS distance

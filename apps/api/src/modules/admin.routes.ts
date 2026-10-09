@@ -84,9 +84,23 @@ adminRouter.post(
     const r = await prisma.report.findUnique({ where: { id: req.params.id } });
     if (!r) throw notFound('Report');
     const action = req.body.action as string;
-    if (r.targetType === 'POST' && (action === 'REMOVE_CONTENT' || action === 'RESTORE_CONTENT'))
-      await prisma.post.update({ where: { id: r.targetId }, data: { status: action === 'REMOVE_CONTENT' ? 'REMOVED' : 'ACTIVE', ...(action === 'RESTORE_CONTENT' ? { reportCount: 0 } : {}) } });
-    if (r.targetType === 'COMMENT' && action === 'REMOVE_CONTENT') await prisma.comment.update({ where: { id: r.targetId }, data: { status: 'REMOVED' } });
+    if (r.targetType === 'POST' && action === 'REMOVE_CONTENT') await prisma.post.updateMany({ where: { id: r.targetId, status: { not: 'REMOVED' } }, data: { status: 'REMOVED' } });
+    // Restore only what moderation hid — never resurrect a post its author deleted.
+    if (r.targetType === 'POST' && action === 'RESTORE_CONTENT') await prisma.post.updateMany({ where: { id: r.targetId, status: 'HIDDEN' }, data: { status: 'ACTIVE', reportCount: 0 } });
+    if (r.targetType === 'COMMENT' && (action === 'REMOVE_CONTENT' || action === 'RESTORE_CONTENT')) {
+      await prisma.$transaction(async (tx) => {
+        const c = await tx.comment.findUnique({ where: { id: r.targetId } });
+        if (!c) return;
+        if (action === 'REMOVE_CONTENT' && c.status !== 'REMOVED') {
+          await tx.comment.update({ where: { id: c.id }, data: { status: 'REMOVED' } });
+          if (c.status === 'ACTIVE') await tx.post.update({ where: { id: c.postId }, data: { commentCount: { decrement: 1 } } });
+        }
+        if (action === 'RESTORE_CONTENT' && c.status === 'HIDDEN') {
+          await tx.comment.update({ where: { id: c.id }, data: { status: 'ACTIVE' } });
+          await tx.post.update({ where: { id: c.postId }, data: { commentCount: { increment: 1 } } });
+        }
+      });
+    }
     if (action === 'BAN_USER') {
       const userId =
         r.targetType === 'USER' ? r.targetId

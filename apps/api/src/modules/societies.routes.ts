@@ -12,6 +12,7 @@
 import crypto from 'node:crypto';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
+import { boundedDate } from '../lib/validators';
 import { MembershipStatus, Prisma, SocietyRole, SocietyType, TicketCategory, TicketStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -22,7 +23,7 @@ import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
 import { clean } from '../services/moderation';
 import { notifyLater } from '../services/notify';
-import { applySocietyApproval, recomputeLevel } from '../services/verification';
+import { applySocietyApproval, revokeSocietyVerification } from '../services/verification';
 
 export const societiesRouter = Router();
 uuidParams(societiesRouter, 'id', 'membershipId', 'nid', 'tid', 'vid', 'aid');
@@ -258,7 +259,7 @@ societiesRouter.delete('/:id/membership', async (req, res) => {
   }
   await prisma.societyMembership.update({ where: { id: m.id }, data: { status: 'REMOVED', role: 'RESIDENT' } });
   await recountMembers(m.societyId);
-  await recomputeLevel(me(req).id);
+  await revokeSocietyVerification(me(req).id, m.societyId);
   res.json({ ok: true });
 });
 
@@ -286,11 +287,12 @@ async function decide(req: Req, approve: boolean) {
   const admin = await requireMember(req, req.params.id, STAFF);
   const m = await prisma.societyMembership.findUnique({ where: { id: req.params.membershipId }, include: { society: { select: { name: true } } } });
   if (!m || m.societyId !== req.params.id) throw notFound('Request');
-  if (m.status !== 'PENDING') throw conflict('This request was already handled');
-  await prisma.societyMembership.update({
-    where: { id: m.id },
+  // Conditional transition: exactly one concurrent approve/reject wins.
+  const moved = await prisma.societyMembership.updateMany({
+    where: { id: m.id, status: 'PENDING' },
     data: { status: approve ? 'APPROVED' : 'REJECTED', approvedById: admin.userId, approvedAt: approve ? new Date() : null },
   });
+  if (moved.count !== 1) throw conflict('This request was already handled');
   if (approve) {
     await recountMembers(m.societyId);
     await applySocietyApproval(m.userId, m.societyId, 'SOCIETY_ADMIN');
@@ -327,7 +329,7 @@ societiesRouter.patch(
     });
     if (req.body.remove) {
       await recountMembers(m.societyId);
-      await recomputeLevel(m.userId);
+      await revokeSocietyVerification(m.userId, m.societyId);
     }
     res.json({ ok: true });
   },
@@ -351,7 +353,7 @@ const noticeBody = z.object({
   body: z.string().trim().min(5).max(5000),
   category: z.enum(['GENERAL', 'MAINTENANCE', 'MEETING', 'EVENT', 'WATER', 'ELECTRICITY', 'SECURITY', 'PAYMENT']).default('GENERAL'),
   isPinned: z.boolean().default(false),
-  expiresAt: z.coerce.date().optional(),
+  expiresAt: boundedDate.optional(),
 });
 
 societiesRouter.post('/:id/notices', validate('body', noticeBody), async (req, res) => {
@@ -389,7 +391,7 @@ societiesRouter.delete('/:id/notices/:nid', async (req, res) => {
 
 societiesRouter.get(
   '/:id/tickets',
-  validate('query', z.object({ status: z.enum(TicketStatus).optional(), mine: z.coerce.boolean().optional() })),
+  validate('query', z.object({ status: z.enum(TicketStatus).optional(), mine: z.stringbool().optional() })),
   async (req, res) => {
     const m = await requireMember(req, req.params.id);
     const query = q<{ status?: TicketStatus; mine?: boolean }>(req);
@@ -527,7 +529,8 @@ societiesRouter.post(
 
 societiesRouter.delete('/:id/vehicles/:vid', async (req, res) => {
   const m = await requireMember(req, req.params.id);
-  const r = await prisma.vehicle.deleteMany({ where: { id: req.params.vid, userId: m.userId, societyId: m.societyId } });
+  // Owners remove their own vehicles; staff can remove any (resolves wrongly registered / squatted plates).
+  const r = await prisma.vehicle.deleteMany({ where: { id: req.params.vid, societyId: m.societyId, ...(STAFF.includes(m.role) ? {} : { userId: m.userId }) } });
   if (!r.count) throw notFound('Vehicle');
   res.json({ ok: true });
 });

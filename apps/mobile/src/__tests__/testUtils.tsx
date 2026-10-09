@@ -14,7 +14,7 @@ export interface MockRoute {
 /** Replace global fetch with a tiny router; records every call for assertions. */
 export function mockFetch(routes: MockRoute[]) {
   const calls: { method: string; url: string; body: unknown; headers: Record<string, string> }[] = [];
-  global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body;

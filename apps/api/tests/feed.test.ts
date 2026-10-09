@@ -179,16 +179,25 @@ describe('engagement', () => {
     expect((await blocker.get('/v1/feed')).body.items).toHaveLength(1);
   });
 
-  it('3 distinct reports auto-hide a post', async () => {
+  it('3 reports from established neighbours auto-hide a post; fresh or PHONE accounts cannot', async () => {
     const author = await locationVerified('Author');
     const p = (await author.post('/v1/posts', { type: 'GENERAL', body: 'Questionable content' })).body;
-    for (let i = 0; i < 3; i++) {
-      const r = await (await login()).post('/v1/reports', { targetType: 'POST', targetId: p.id, reason: 'SPAM' });
-      expect(r.status).toBe(201);
-    }
+    // PHONE-level accounts can't report at all.
+    const phoneOnly = await login();
+    await setHome(phoneOnly, HSR);
+    expect((await phoneOnly.post('/v1/reports', { targetType: 'POST', targetId: p.id, reason: 'SPAM' })).status).toBe(403);
+    // Three brand-new LOCATION accounts: reports are recorded but don't auto-hide.
+    for (let i = 0; i < 3; i++) expect((await (await locationVerified(`Fresh ${i}`)).post('/v1/reports', { targetType: 'POST', targetId: p.id, reason: 'SPAM' })).status).toBe(201);
     const viewer = await addressVerified('Viewer');
+    expect((await viewer.get('/v1/feed')).body.items).toHaveLength(1);
+    // Established accounts (>3 days old) do count.
+    for (let i = 0; i < 3; i++) {
+      const r = await locationVerified(`Old ${i}`);
+      await prisma.user.update({ where: { id: r.id }, data: { createdAt: new Date(Date.now() - 10 * 86400_000) } });
+      await r.post('/v1/reports', { targetType: 'POST', targetId: p.id, reason: 'SPAM' });
+    }
     expect((await viewer.get('/v1/feed')).body.items).toHaveLength(0);
-    const dup = await login();
+    const dup = await locationVerified('Dup');
     await dup.post('/v1/reports', { targetType: 'POST', targetId: p.id, reason: 'SPAM' });
     expect((await dup.post('/v1/reports', { targetType: 'POST', targetId: p.id, reason: 'SPAM' })).status).toBe(409);
   });
@@ -199,7 +208,8 @@ describe('engagement', () => {
     await locationVerified('C', offset(HSR, 9000, 0));
     await a.post('/v1/posts', { type: 'GENERAL', body: 'Stats test post' });
     const s = await a.get('/v1/me/neighborhood');
-    expect(s.body).toMatchObject({ neighborsInRadius: 1, postsThisWeek: 1, radiusM: 3000 });
+    // Counts are bucketed (anti location-oracle): fewer than 10 neighbours reads as 0.
+    expect(s.body).toMatchObject({ neighborsInRadius: 0, approximate: true, postsThisWeek: 1, radiusM: 3000 });
     const u = await login();
     await setHome(u, HSR);
     expect((await u.get('/v1/me/neighbors')).status).toBe(403);

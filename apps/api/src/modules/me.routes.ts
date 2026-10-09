@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { mediaUrl } from '../lib/validators';
 import { prisma } from '../lib/prisma';
-import { badRequest, notFound } from '../lib/errors';
+import { badRequest, notFound, tooMany } from '../lib/errors';
 import {
   clampRadius,
+  bucketCount,
   countUsersWithin,
   createWithPoint,
   findNearbyUsers,
@@ -28,6 +30,7 @@ uuidParams(usersRouter, 'id');
 
 /** Neighbourhood graduates from SEEDED → ACTIVE at this many members (cold-start milestone). */
 const NEIGHBORHOOD_ACTIVE_AT = 25;
+const MAX_ADDRESS_CHANGES_PER_30D = 3;
 
 export async function recountNeighborhood(id: string | null | undefined) {
   if (!id) return;
@@ -86,7 +89,7 @@ meRouter.patch(
     z.object({
       name: z.string().trim().min(2).max(60).optional(),
       bio: z.string().trim().max(280).optional(),
-      avatarUrl: z.string().url().max(500).nullable().optional(),
+      avatarUrl: mediaUrl.nullable().optional(),
       language: z.enum(['en', 'hi', 'kn', 'ta', 'te', 'mr', 'bn', 'gu', 'ml', 'pa']).optional(),
       feedRadiusM: z.number().int().min(2000).max(5000).optional(),
     }),
@@ -140,6 +143,10 @@ meRouter.put('/address', validate('body', addressSchema), async (req, res) => {
   const { lat, lng, ...fields } = req.body as z.infer<typeof addressSchema>;
   const point = { lat, lng };
   if (!isInIndia(point)) throw badRequest('Mohalla Connect is currently available only in India');
+
+  // Moving home is rare in real life; frequent moves are how location oracles and spoofing work.
+  const recentMoves = await prisma.address.count({ where: { userId, createdAt: { gt: new Date(Date.now() - 30 * 86400_000) } } });
+  if (recentMoves >= MAX_ADDRESS_CHANGES_PER_30D) throw tooMany('You can change your home address at most 3 times a month. Contact support if you need help.');
 
   const prev = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { neighborhoodId: true } });
   const hood = await findNeighborhoodForPoint(point);
@@ -239,7 +246,7 @@ meRouter.get('/neighborhood', async (req, res) => {
     ? await prisma.neighborhood.findUnique({ where: { id: user.neighborhoodId }, select: { id: true, name: true, city: true, status: true, memberCount: true } })
     : null;
   const [neighborsInRadius, postsThisWeek] = await Promise.all([
-    countUsersWithin(home, user.feedRadiusM),
+    countUsersWithin(home, user.feedRadiusM, { verifiedOnly: true }),
     prisma.$queryRaw<{ n: bigint }[]>`
       SELECT count(*) AS n FROM posts
       WHERE status = 'ACTIVE' AND "createdAt" > now() - interval '7 days'
@@ -248,7 +255,9 @@ meRouter.get('/neighborhood', async (req, res) => {
   res.json({
     neighborhood: hood,
     radiusM: user.feedRadiusM,
-    neighborsInRadius: Math.max(0, neighborsInRadius - 1),
+    // Bucketed: an exact count + movable centre would be a location oracle.
+    neighborsInRadius: bucketCount(Math.max(0, neighborsInRadius - 1)),
+    approximate: true,
     postsThisWeek: Number(postsThisWeek[0].n),
   });
 });

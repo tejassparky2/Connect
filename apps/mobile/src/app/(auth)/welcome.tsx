@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, type IconName } from '@/components/ui';
 
@@ -15,6 +16,7 @@ export default function Welcome() {
   const insets = useSafeAreaInsets();
   return (
     <View className="flex-1 bg-white">
+      <StatusBar style="light" />
       <LinearGradient colors={['#0F766E', '#115E59']} style={{ paddingTop: insets.top + 32, paddingBottom: 48, paddingHorizontal: 24, borderBottomLeftRadius: 36, borderBottomRightRadius: 36 }}>
         <View className="mb-6 h-14 w-14 items-center justify-center rounded-2xl bg-white/15">
           <Text className="text-3xl">🏘️</Text>

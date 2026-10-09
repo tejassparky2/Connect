@@ -6,10 +6,16 @@ import Constants from 'expo-constants';
  * (e.g. https://api.mohallaconnect.in or http://192.168.1.10:4000 for a phone on LAN).
  */
 function defaultBase() {
-  if (Platform.OS === 'android') return 'http://10.0.2.2:4000'; // Android emulator → host
+  // Dev only: derive the API host from the Metro dev-server host (works for physical devices on LAN).
   const host = Constants.expoConfig?.hostUri?.split(':')[0];
-  if (host && Platform.OS !== 'web') return `http://${host}:4000`; // Expo Go on LAN
+  if (host && Platform.OS !== 'web' && host !== 'localhost' && host !== '127.0.0.1') return `http://${host}:4000`;
+  if (Platform.OS === 'android') return 'http://10.0.2.2:4000'; // Android emulator → host machine
   return 'http://localhost:4000';
+}
+
+if (!__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
+  // Release builds must point at an HTTPS API (cleartext HTTP is blocked on iOS/Android).
+  console.warn('EXPO_PUBLIC_API_URL is not set for a release build');
 }
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || defaultBase()).replace(/\/$/, '');

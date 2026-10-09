@@ -36,7 +36,7 @@ authRouter.post(
   validate('body', z.object({ phone: z.string().min(10).max(20), code: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits') })),
   async (req, res) => {
     const phone = parsePhone(req.body.phone);
-    const { providerUserId } = await otpProvider.verify(phone, req.body.code);
+    const { providerUserId } = await otpProvider.verify(phone, req.body.code, req.ip);
 
     let user = await prisma.user.findUnique({ where: { phone } });
     const isNewUser = !user;

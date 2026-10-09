@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -6,14 +6,52 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { secureStorage } from '@/lib/storage';
+
+const PUSH_KEY = 'mc.push';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldPlaySound: true, shouldSetBadge: true, shouldShowBanner: true, shouldShowList: true }),
 });
 
+/** Same routing as the in-app notification list, so a tap lands on the same screen. */
+export function routeForNotification(d: Record<string, unknown>) {
+  const s = (k: string) => (typeof d[k] === 'string' ? (d[k] as string) : undefined);
+  if (s('postId')) return `/post/${s('postId')}`;
+  if (s('conversationId')) return `/messages/${s('conversationId')}`;
+  if (s('ticketId') && s('societyId')) return `/society/${s('societyId')}/tickets/${s('ticketId')}`;
+  if (s('alertId') && s('societyId')) return `/society/${s('societyId')}/parking`;
+  if (s('noticeId') && s('societyId')) return `/society/${s('societyId')}/notices`;
+  if (s('societyId')) return `/society/${s('societyId')}`;
+  if (s('businessId')) return `/business/${s('businessId')}`;
+  if (s('campaignId')) return '/(tabs)/profile';
+  return '/notifications';
+}
+
+/** Unregister this device's push token (call BEFORE revoking the session). */
+export async function unregisterPush() {
+  const token = await secureStorage.get(PUSH_KEY).catch(() => null);
+  if (!token) return;
+  await api.del('/me/push-tokens', { token }).catch(() => undefined);
+  await secureStorage.remove(PUSH_KEY).catch(() => undefined);
+}
+
 /** Register this device for Expo push and deep-link on notification tap. No-op on web/simulators. */
 export function usePushRegistration() {
   const status = useAuth((s) => s.status);
+  const lastResponse = Notifications.useLastNotificationResponse();
+  const handled = useRef<string | null>(null);
+
+  // Handles taps that cold-started the app as well as taps while running (each response once).
+  useEffect(() => {
+    if (status !== 'signedIn' || !lastResponse) return;
+    const id = `${lastResponse.notification.request.identifier}:${lastResponse.actionIdentifier}`;
+    if (handled.current === id) return;
+    handled.current = id;
+    const d = lastResponse.notification.request.content.data as Record<string, unknown>;
+    router.push(routeForNotification(d ?? {}));
+  }, [status, lastResponse]);
+
   useEffect(() => {
     if (status !== 'signedIn' || Platform.OS === 'web' || !Device.isDevice) return;
     (async () => {
@@ -26,20 +64,13 @@ export function usePushRegistration() {
         const finalStatus = existing === 'granted' ? existing : (await Notifications.requestPermissionsAsync()).status;
         if (finalStatus !== 'granted') return;
         const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-        const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+        if (!projectId) return; // push tokens require an EAS projectId (set via `eas init`)
+        const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
         await api.post('/me/push-tokens', { token, platform: Platform.OS });
+        await secureStorage.set(PUSH_KEY, token);
       } catch {
-        // Push is best-effort (e.g. Expo Go without a projectId).
+        // Push is best-effort.
       }
     })();
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
-      const d = r.notification.request.content.data as Record<string, string>;
-      if (d.postId) router.push(`/post/${d.postId}`);
-      else if (d.conversationId) router.push(`/messages/${d.conversationId}`);
-      else if (d.ticketId && d.societyId) router.push(`/society/${d.societyId}/tickets/${d.ticketId}`);
-      else if (d.societyId) router.push(`/society/${d.societyId}`);
-      else router.push('/notifications');
-    });
-    return () => sub.remove();
   }, [status]);
 }

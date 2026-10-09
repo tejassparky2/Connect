@@ -12,7 +12,7 @@ import { Prisma, ServiceSkill } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { bucketDistance, createWithPoint, getUserHome, pointSql, queryNearbyProviderIds, setPoint, type DirectoryCursor } from '../lib/geo';
-import { decodeCursor, encodeCursor } from '../lib/pagination';
+import { decodeCursor, distanceCursor, encodeCursor } from '../lib/pagination';
 import { normalizeIndianPhone } from '../lib/phone';
 import { publicUserSelect, toPublicUser } from '../lib/serializers';
 import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
@@ -65,7 +65,7 @@ providersRouter.get(
       skill: query.skill,
       q: query.q || undefined,
       limit: query.limit + 1,
-      cursor: decodeCursor<DirectoryCursor & Record<string, unknown>>(query.cursor),
+      cursor: decodeCursor(query.cursor, distanceCursor),
     });
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
@@ -125,6 +125,19 @@ providersRouter.post('/', requireLevel('LOCATION'), validate('body', providerBod
     { fuzz: true, after: async (tx, row) => void (await tx.providerVouch.create({ data: { providerId: row.id, userId: user.id, note: 'Listed this worker' } })) },
   );
   res.status(201).json(toProvider(p, 0, user.id));
+});
+
+/**
+ * A worker who installs the app claims their listing: their OTP-verified phone must match.
+ * This also resolves "phone squatting" — the real owner of the number takes control.
+ */
+providersRouter.post('/claim', async (req, res) => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: me(req).id }, select: { phone: true } });
+  const p = await prisma.serviceProvider.findUnique({ where: { phone: user.phone } });
+  if (!p) throw notFound('Worker listing for your phone number');
+  if (p.userId && p.userId !== me(req).id) throw conflict('Listing already claimed');
+  const claimed = await prisma.serviceProvider.update({ where: { id: p.id }, data: { userId: me(req).id } });
+  res.json(toProvider(claimed, undefined, me(req).id));
 });
 
 providersRouter.get('/:id', async (req, res) => {

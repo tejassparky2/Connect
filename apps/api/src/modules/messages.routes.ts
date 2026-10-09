@@ -2,14 +2,17 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { badRequest, forbidden, notFound } from '../lib/errors';
-import { decodeCursor, encodeCursor } from '../lib/pagination';
+import { decodeCursor, encodeCursor, timeCursor } from '../lib/pagination';
 import { publicUserSelect, toPublicUser } from '../lib/serializers';
 import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
+import { perUser } from '../middleware/limits';
+import { getUserHome, pointSql } from '../lib/geo';
 import { clean } from '../services/moderation';
 import { notifyLater } from '../services/notify';
 
 export const messagesRouter = Router();
+const messageLimiter = perUser(10 * 60_000, 60, 'You are sending messages too fast. Please slow down.');
 uuidParams(messagesRouter, 'id');
 messagesRouter.use(requireAuth);
 
@@ -55,6 +58,7 @@ messagesRouter.get('/', async (req, res) => {
 messagesRouter.post(
   '/',
   requireLevel('LOCATION'),
+  messageLimiter,
   validate('body', z.object({ userId: z.uuid(), postId: z.uuid().optional(), body: z.string().trim().min(1).max(2000) })),
   async (req, res) => {
     const sender = me(req);
@@ -62,6 +66,13 @@ messagesRouter.post(
     const other = await prisma.user.findFirst({ where: { id: req.body.userId, deletedAt: null, isBanned: false }, select: { id: true } });
     if (!other) throw notFound('User');
     await assertNotBlocked(sender.id, other.id);
+    // A chat may only reference a listing the sender can actually see (active, within 10 km).
+    if (req.body.postId) {
+      const home = await getUserHome(sender.id);
+      const ok = home && (await prisma.$queryRaw<{ ok: boolean }[]>`
+        SELECT true AS ok FROM posts WHERE id = ${req.body.postId}::uuid AND status = 'ACTIVE' AND ST_DWithin(location, ${pointSql(home)}, 10000)`).length;
+      if (!ok) throw notFound('Post');
+    }
     const pair = orderPair(sender.id, other.id);
     const body = clean(req.body.body);
     const conv = await prisma.$transaction(async (tx) => {
@@ -98,7 +109,7 @@ messagesRouter.get(
     const userId = me(req).id;
     const c = await loadConversation(req.params.id, userId);
     const query = q<{ cursor?: string; after?: string; limit: number }>(req);
-    const cur = decodeCursor<{ t: string; id: string }>(query.cursor);
+    const cur = decodeCursor(query.cursor, timeCursor);
     // `after` = polling for new messages; `cursor` = loading older history.
     const msgs = await prisma.message.findMany({
       where: {
@@ -119,7 +130,7 @@ messagesRouter.get(
   },
 );
 
-messagesRouter.post('/:id/messages', validate('body', z.object({ body: z.string().trim().min(1).max(2000) })), async (req, res) => {
+messagesRouter.post('/:id/messages', requireLevel('LOCATION'), messageLimiter, validate('body', z.object({ body: z.string().trim().min(1).max(2000) })), async (req, res) => {
   const sender = me(req);
   const c = await loadConversation(req.params.id, sender.id);
   const otherId = c.userAId === sender.id ? c.userBId : c.userAId;

@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { mediaUrl, boundedDate } from '../lib/validators';
 import { BusinessCategory, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { bucketDistance, clampRadius, createWithPoint, getUserHome, isInIndia, pointSql, queryNearbyBusinessIds, setPoint, type DirectoryCursor } from '../lib/geo';
-import { decodeCursor, encodeCursor } from '../lib/pagination';
+import { decodeCursor, distanceCursor, encodeCursor } from '../lib/pagination';
 import { normalizeIndianPhone } from '../lib/phone';
 import { publicUserSelect, toPublicUser } from '../lib/serializers';
 import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
 import { clean } from '../services/moderation';
 import { notifyLater } from '../services/notify';
-import { createRazorpayOrder, creditWallet, fetchRazorpayOrderAmount, paymentsMode, verifyRazorpaySignature } from '../services/payments';
+import { createRazorpayOrder, creditWallet, fetchRazorpayOrder, MAX_WALLET_PAISE, orderBusinessId, paymentsMode, verifyRazorpaySignature } from '../services/payments';
 import { signPaySession } from './payments.routes';
 import { env } from '../config/env';
 
@@ -32,9 +33,9 @@ const businessBody = z.object({
   lat: z.number(),
   lng: z.number(),
   hours: hoursSchema,
-  photos: z.array(z.string().url().max(500)).max(8).default([]),
+  photos: z.array(mediaUrl).max(8).default([]),
   gstin: z.string().regex(/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, 'Invalid GSTIN').optional(),
-  openedAt: z.coerce.date().optional(),
+  openedAt: boundedDate.optional(),
 });
 
 function phoneOrThrow(p: string, field = 'phone') {
@@ -92,7 +93,7 @@ businessesRouter.get(
       category: query.category,
       q: query.q || undefined,
       limit: query.limit + 1,
-      cursor: decodeCursor<DirectoryCursor & Record<string, unknown>>(query.cursor),
+      cursor: decodeCursor(query.cursor, distanceCursor),
     });
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
@@ -200,6 +201,9 @@ businessesRouter.patch('/:id', validate('body', businessBody.partial()), async (
     await tx.business.update({ where: { id: b.id }, data });
     if (lat != null && lng != null) {
       if (!isInIndia({ lat, lng })) throw badRequest('Business must be located in India');
+      // The pin can be corrected within 24 h of listing; after that it's locked (moving pins + reach
+      // estimates would otherwise be a location oracle). Real relocations go through support.
+      if (Date.now() - b.createdAt.getTime() > 24 * 3600_000) throw forbidden('Shop location is locked. Contact support to move your business.');
       await setPoint('businesses', b.id, { lat, lng }, { tx });
     }
   });
@@ -210,7 +214,7 @@ businessesRouter.patch('/:id', validate('body', businessBody.partial()), async (
 
 businessesRouter.post(
   '/:id/announcements',
-  validate('body', z.object({ title: z.string().trim().min(3).max(80), body: z.string().trim().min(5).max(500), validUntil: z.coerce.date().optional() })),
+  validate('body', z.object({ title: z.string().trim().min(3).max(80), body: z.string().trim().min(5).max(500), validUntil: boundedDate.optional() })),
   async (req, res) => {
     const b = await prisma.business.findUnique({ where: { id: req.params.id } });
     if (!b) throw notFound('Business');
@@ -286,6 +290,7 @@ businessesRouter.post(
     const b = await ownedBusiness(req.params.id, me(req).id);
     const mode = paymentsMode();
     if (mode === 'disabled') throw badRequest('Payments are not configured');
+    if (b.walletPaise + req.body.amountPaise > MAX_WALLET_PAISE) throw badRequest('Wallet balance cannot exceed ₹10,00,000');
     if (mode === 'dev') return res.json({ mode, orderId: `dev_order_${Date.now()}`, amountPaise: req.body.amountPaise, currency: 'INR' });
     const order = await createRazorpayOrder(req.body.amountPaise, `wallet_${b.id.slice(0, 8)}_${Date.now()}`, { businessId: b.id });
     // Native apps open this hosted Razorpay Checkout page in a secure browser session.
@@ -315,7 +320,11 @@ businessesRouter.post(
       amount = req.body.amountPaise;
     } else if (mode === 'razorpay') {
       if (!verifyRazorpaySignature(req.body.orderId, req.body.paymentId, req.body.signature)) throw forbidden('Payment signature mismatch');
-      amount = await fetchRazorpayOrderAmount(req.body.orderId); // trust the gateway, not the client, for the amount
+      // Trust the gateway, not the client: amount, status AND which business the order was created for.
+      const order = await fetchRazorpayOrder(req.body.orderId);
+      if (orderBusinessId(order) !== b.id) throw forbidden('This payment belongs to a different business');
+      if (order.status !== 'paid') return res.status(202).json({ ok: true, pending: true, message: 'Payment is being confirmed. Your wallet will update shortly.' });
+      amount = order.amount_paid;
     } else throw badRequest('Payments are not configured');
 
     const credited = await creditWallet(b.id, req.body.paymentId, amount);

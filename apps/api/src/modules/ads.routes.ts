@@ -11,9 +11,12 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
+import { mediaUrl, boundedDate } from '../lib/validators';
 import { prisma } from '../lib/prisma';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
-import { countUsersWithin, createWithPoint, getPoint, queryEligibleAdIds, type LatLng } from '../lib/geo';
+import { bucketCount, countUsersWithin, createWithPoint, getPoint, pointSql, queryEligibleAdIds, type LatLng } from '../lib/geo';
+import rateLimit from 'express-rate-limit';
+import { isTest } from '../config/env';
 import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
 import { clean, needsReview } from '../services/moderation';
@@ -43,15 +46,23 @@ export async function serveAdsFor(home: LatLng, limit: number) {
   return ads.map((a) => ({ ...a, sponsored: true as const }));
 }
 
-/** Refund unspent reserve and close the campaign. Idempotent via the unique wallet reference. */
+/**
+ * Close a campaign and refund (budget − spent) exactly once.
+ * The row is locked FOR UPDATE first, so concurrent impression UPDATEs either finish
+ * before we read spentPaise or re-check `status = 'ACTIVE'` after we commit and bill nothing.
+ */
 export async function settleCampaign(campaignId: string, finalStatus: 'ENDED' | 'EXHAUSTED') {
   await prisma.$transaction(async (tx) => {
-    const c = await tx.adCampaign.findUniqueOrThrow({ where: { id: campaignId } });
-    const refund = c.budgetPaise - c.spentPaise;
+    const locked = await tx.$queryRaw<{ id: string; businessId: string; budgetPaise: number; spentPaise: number; status: string; headline: string }[]>`
+      SELECT id, "businessId", "budgetPaise", "spentPaise", status::text AS status, headline
+      FROM ad_campaigns WHERE id = ${campaignId}::uuid FOR UPDATE`;
+    const c = locked[0];
+    if (!c) return;
+    const wasFunded = !['DRAFT', 'REJECTED'].includes(c.status);
     await tx.adCampaign.update({ where: { id: c.id }, data: { status: finalStatus } });
+    const refund = c.budgetPaise - c.spentPaise;
     const ref = `refund:${c.id}`;
-    const exists = await tx.walletTransaction.findUnique({ where: { reference: ref } });
-    if (refund > 0 && !exists && c.status !== 'DRAFT' && c.status !== 'REJECTED') {
+    if (refund > 0 && wasFunded && !(await tx.walletTransaction.findUnique({ where: { reference: ref } }))) {
       await tx.walletTransaction.create({ data: { businessId: c.businessId, type: 'REFUND', amountPaise: refund, reference: ref, note: `Unspent budget: ${c.headline}` } });
       await tx.business.update({ where: { id: c.businessId }, data: { walletPaise: { increment: refund } } });
     }
@@ -89,15 +100,21 @@ adsRouter.get('/campaigns', validate('query', z.object({ businessId: z.uuid() })
 });
 
 /** Estimated reach for the targeting slider in the ad builder. */
+const estimateLimiter = rateLimit({ windowMs: 60 * 60_000, limit: isTest ? 1000 : 30, standardHeaders: 'draft-7', legacyHeaders: false, keyGenerator: (req) => req.user?.id ?? 'anon' });
+
+/** Estimated reach for the ad builder. Owner-only, rate-limited and bucketed (see bucketCount). */
 adsRouter.get(
   '/estimate',
+  estimateLimiter,
   validate('query', z.object({ businessId: z.uuid(), radiusM: z.coerce.number().int().min(500).max(10000) })),
   async (req, res) => {
     const { businessId, radiusM } = q<{ businessId: string; radiusM: number }>(req);
+    const biz = await prisma.business.findUnique({ where: { id: businessId }, select: { ownerId: true } });
+    if (!biz || biz.ownerId !== me(req).id) throw forbidden('Not your business');
     const loc = await getPoint('businesses', businessId);
     if (!loc) throw notFound('Business');
-    const households = await countUsersWithin(loc, radiusM);
-    res.json({ radiusM, verifiedHouseholds: households, suggestedDailyBudgetPaise: Math.max(MIN_BUDGET_PAISE, Math.ceil(households * 2 * MIN_CPM_PAISE / 1000 / 100) * 100) });
+    const households = bucketCount(await countUsersWithin(loc, radiusM, { verifiedOnly: true }));
+    res.json({ radiusM, verifiedHouseholds: households, approximate: true, suggestedDailyBudgetPaise: Math.max(MIN_BUDGET_PAISE, Math.ceil((households * 2 * MIN_CPM_PAISE) / 1000 / 100) * 100) });
   },
 );
 
@@ -106,13 +123,13 @@ const createCampaign = z
     businessId: z.uuid(),
     headline: z.string().trim().min(5).max(80),
     body: z.string().trim().min(10).max(280),
-    imageUrl: z.string().url().max(500).optional(),
+    imageUrl: mediaUrl.optional(),
     cta: z.enum(['CALL', 'WHATSAPP', 'VIEW_BUSINESS']).default('VIEW_BUSINESS'),
     radiusM: z.number().int().min(500).max(10000).default(3000),
     budgetPaise: z.number().int().min(MIN_BUDGET_PAISE).max(10_000_000_00),
     cpmPaise: z.number().int().min(MIN_CPM_PAISE).max(1000_00).default(50_00),
-    startAt: z.coerce.date().optional(),
-    endAt: z.coerce.date(),
+    startAt: boundedDate.optional(),
+    endAt: boundedDate,
   })
   .refine((v) => v.endAt.getTime() > (v.startAt?.getTime() ?? Date.now()), { message: 'End date must be after start', path: ['endAt'] });
 
@@ -157,7 +174,9 @@ adsRouter.post('/campaigns/:id/launch', async (req, res) => {
     const debited = await tx.business.updateMany({ where: { id: c.businessId, walletPaise: { gte: c.budgetPaise } }, data: { walletPaise: { decrement: c.budgetPaise } } });
     if (debited.count !== 1) throw badRequest('Insufficient wallet balance. Please top up first.');
     await tx.walletTransaction.create({ data: { businessId: c.businessId, type: 'AD_SPEND', amountPaise: -c.budgetPaise, reference: `reserve:${c.id}`, note: `Budget reserved: ${c.headline}` } });
-    await tx.adCampaign.update({ where: { id: c.id }, data: { status: flagged ? 'PENDING_REVIEW' : 'ACTIVE' } });
+    // Conditional transition: a concurrent /end on the DRAFT must not be overwritten.
+    const moved = await tx.adCampaign.updateMany({ where: { id: c.id, status: 'DRAFT' }, data: { status: flagged ? 'PENDING_REVIEW' : 'ACTIVE' } });
+    if (moved.count !== 1) throw conflict('Campaign changed state, please refresh');
   });
   res.json(campaignOut(await ownedCampaign(c.id, me(req).id)));
 });
@@ -195,11 +214,24 @@ adsRouter.get('/serve', validate('query', z.object({ limit: z.coerce.number().in
 
 const today = () => new Date(new Date().toISOString().slice(0, 10));
 
-adsRouter.post('/:id/impression', async (req, res) => {
+/**
+ * Impressions are billed only if the ad is genuinely eligible for THIS viewer right now:
+ * LOCATION-verified viewer, campaign ACTIVE and in its date window, and the viewer's
+ * home inside the campaign's targeting radius. All checks live in the same UPDATE as
+ * the billing, so they're atomic with it. One billable impression per user per day.
+ */
+adsRouter.post('/:id/impression', requireLevel('LOCATION'), async (req, res) => {
   const userId = me(req).id;
-  const ins = await prisma.adEvent.createMany({ data: [{ campaignId: req.params.id, userId, type: 'IMPRESSION', day: today() }], skipDuplicates: true }).catch(() => ({ count: 0 }));
+  const home = await getPoint('users', userId);
+  if (!home) return res.json({ ok: true });
+  const eligible = await prisma.$queryRaw<{ ok: boolean }[]>`
+    SELECT true AS ok FROM ad_campaigns c
+    WHERE c.id = ${req.params.id}::uuid AND c.status = 'ACTIVE' AND now() BETWEEN c."startAt" AND c."endAt"
+      AND ST_DWithin(c.location, ${pointSql(home)}, c."radiusM")`;
+  if (!eligible.length) return res.json({ ok: true, billed: false });
+  const ins = await prisma.adEvent.createMany({ data: [{ campaignId: req.params.id, userId, type: 'IMPRESSION', day: today() }], skipDuplicates: true });
+  let billed = false;
   if (ins.count === 1) {
-    // Atomic bill: spend derived from impressions, capped at budget; flips to EXHAUSTED when used up.
     const rows = await prisma.$queryRaw<{ status: string; ownerId: string; headline: string }[]>`
       UPDATE ad_campaigns c SET
         impressions = c.impressions + 1,
@@ -207,17 +239,23 @@ adsRouter.post('/:id/impression', async (req, res) => {
         status = CASE WHEN ((c.impressions + 1)::bigint * c."cpmPaise" / 1000) >= c."budgetPaise" THEN 'EXHAUSTED'::"AdStatus" ELSE c.status END,
         "updatedAt" = now()
       FROM businesses b
-      WHERE c.id = ${req.params.id}::uuid AND c.status = 'ACTIVE' AND b.id = c."businessId"
+      WHERE c.id = ${req.params.id}::uuid AND c.status = 'ACTIVE' AND now() BETWEEN c."startAt" AND c."endAt"
+        AND b.id = c."businessId"
       RETURNING c.status::text AS status, b."ownerId" AS "ownerId", c.headline`;
+    billed = rows.length === 1;
     if (rows[0]?.status === 'EXHAUSTED') {
       notifyLater([rows[0].ownerId], { type: 'AD_STATUS', title: 'Campaign budget used up', body: `"${rows[0].headline}" has reached its budget.`, data: { campaignId: req.params.id } });
     }
   }
-  res.json({ ok: true });
+  res.json({ ok: true, billed });
 });
 
-adsRouter.post('/:id/click', async (req, res) => {
-  const ins = await prisma.adEvent.createMany({ data: [{ campaignId: req.params.id, userId: me(req).id, type: 'CLICK', day: today() }], skipDuplicates: true }).catch(() => ({ count: 0 }));
+adsRouter.post('/:id/click', requireLevel('LOCATION'), async (req, res) => {
+  const userId = me(req).id;
+  // A click only counts after a recorded impression for this viewer today.
+  const seen = await prisma.adEvent.findUnique({ where: { campaignId_userId_type_day: { campaignId: req.params.id, userId, type: 'IMPRESSION', day: today() } } });
+  if (!seen) return res.json({ ok: true });
+  const ins = await prisma.adEvent.createMany({ data: [{ campaignId: req.params.id, userId, type: 'CLICK', day: today() }], skipDuplicates: true });
   if (ins.count === 1) await prisma.adCampaign.updateMany({ where: { id: req.params.id }, data: { clicks: { increment: 1 } } });
   res.json({ ok: true });
 });

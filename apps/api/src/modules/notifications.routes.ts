@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { decodeCursor, encodeCursor } from '../lib/pagination';
+import { decodeCursor, encodeCursor, timeCursor } from '../lib/pagination';
 import { me, requireAuth, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
 
@@ -11,7 +11,7 @@ notificationsRouter.use(requireAuth);
 
 notificationsRouter.get('/', validate('query', z.object({ cursor: z.string().optional(), limit: z.coerce.number().int().min(1).max(50).default(30) })), async (req, res) => {
   const { cursor, limit } = q<{ cursor?: string; limit: number }>(req);
-  const cur = decodeCursor<{ t: string; id: string }>(cursor);
+  const cur = decodeCursor(cursor, timeCursor);
   const items = await prisma.notification.findMany({
     where: {
       userId: me(req).id,

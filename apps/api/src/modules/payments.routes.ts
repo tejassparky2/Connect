@@ -14,7 +14,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { badRequest, forbidden } from '../lib/errors';
 import { logger } from '../lib/logger';
-import { creditWallet, fetchRazorpayOrderAmount, verifyRazorpaySignature, verifyWebhookSignature } from '../services/payments';
+import { creditWallet, fetchRazorpayOrder, orderBusinessId, verifyRazorpaySignature, verifyWebhookSignature } from '../services/payments';
 
 export const paymentsRouter = Router();
 
@@ -45,7 +45,7 @@ paymentsRouter.get('/checkout', (req, res) => {
   const nonce = crypto.randomBytes(16).toString('base64');
   res.setHeader(
     'Content-Security-Policy',
-    `default-src 'self'; script-src 'nonce-${nonce}' https://checkout.razorpay.com; frame-src https://api.razorpay.com https://checkout.razorpay.com; connect-src 'self' https://*.razorpay.com; img-src 'self' data: https:; style-src 'unsafe-inline'`,
+    `default-src 'self'; script-src 'nonce-${nonce}' https://checkout.razorpay.com https://cdn.razorpay.com; frame-src https://api.razorpay.com https://checkout.razorpay.com; connect-src 'self' https://*.razorpay.com; img-src 'self' data: https:; style-src 'unsafe-inline'`,
   );
   const rupees = (session.a / 100).toLocaleString('en-IN');
   res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -61,9 +61,9 @@ button{background:#0F766E;color:#fff;border:0;border-radius:16px;padding:14px 20
 <script nonce="${nonce}">
 var S=${JSON.stringify(String(req.query.s))};
 function done(ok,text){document.getElementById('msg').textContent=text;if(ok){setTimeout(function(){location.href='mohalla://wallet?status=success'},800)}}
-var rzp=new Razorpay({key:${JSON.stringify(env.RAZORPAY_KEY_ID)},order_id:${JSON.stringify(session.o)},amount:${session.a},currency:'INR',name:'Mohalla Connect',description:'Ad wallet top-up',theme:{color:'#0F766E'},
+var rzp=new Razorpay({key:${JSON.stringify(env.RAZORPAY_KEY_ID)},order_id:${JSON.stringify(session.o)},amount:${session.a},currency:'INR',name:'Mohalla Connect',description:'Ad wallet top-up',notes:{businessId:${JSON.stringify(session.b)}},theme:{color:'#0F766E'},
 handler:function(r){done(false,'Verifying payment…');fetch('/pay/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({s:S,paymentId:r.razorpay_payment_id,orderId:r.razorpay_order_id,signature:r.razorpay_signature})})
-.then(function(x){return x.json()}).then(function(j){j.ok?done(true,'Payment successful! Returning to the app…'):done(false,(j.error&&j.error.message)||'Verification failed')}).catch(function(){done(false,'Network error. If money was deducted it will be credited automatically.')})},
+.then(function(x){return x.json()}).then(function(j){j.ok?done(true,j.pending?'Payment received — confirming with your bank. Returning to the app…':'Payment successful! Returning to the app…'):done(false,(j.error&&j.error.message)||'Verification failed')}).catch(function(){done(false,'Network error. If money was deducted it will be credited automatically.')})},
 modal:{ondismiss:function(){done(false,'Payment cancelled.')}}});
 document.getElementById('pay').onclick=function(){rzp.open()};rzp.open();
 </script></body></html>`);
@@ -74,8 +74,11 @@ paymentsRouter.post('/complete', express.json(), async (req, res) => {
   const { paymentId, orderId, signature } = req.body ?? {};
   if (orderId !== session.o) throw forbidden('Order mismatch');
   if (!verifyRazorpaySignature(String(orderId), String(paymentId), String(signature))) throw forbidden('Payment signature mismatch');
-  const paid = await fetchRazorpayOrderAmount(session.o);
-  const r = await creditWallet(session.b, String(paymentId), paid);
+  const order = await fetchRazorpayOrder(session.o);
+  if (orderBusinessId(order) !== session.b) throw forbidden('Order mismatch');
+  // Authorized but not yet captured: the webhook (order.paid) will credit it.
+  if (order.status !== 'paid') return res.status(202).json({ ok: true, pending: true });
+  const r = await creditWallet(session.b, String(paymentId), order.amount_paid);
   res.json({ ok: true, balancePaise: r.balancePaise });
 });
 
@@ -87,16 +90,27 @@ export const razorpayWebhook = [
     if (!Buffer.isBuffer(req.body) || !verifyWebhookSignature(req.body, sig)) return res.status(401).json({ ok: false });
     const evt = JSON.parse(req.body.toString('utf8')) as {
       event: string;
-      payload?: { payment?: { entity?: { id: string; amount: number; notes?: { businessId?: string } } } };
+      payload?: {
+        payment?: { entity?: { id: string; amount: number; order_id?: string; notes?: Record<string, string> | [] } };
+        order?: { entity?: { id: string; amount_paid: number; notes?: Record<string, string> | [] } };
+      };
     };
-    const p = evt.payload?.payment?.entity;
-    if (evt.event === 'payment.captured' && p?.notes?.businessId) {
-      try {
-        await creditWallet(p.notes.businessId, p.id, p.amount);
-      } catch (err) {
-        logger.error({ err }, 'Webhook credit failed');
-        return res.status(500).json({ ok: false }); // Razorpay retries
+    const payment = evt.payload?.payment?.entity;
+    try {
+      if (evt.event === 'order.paid' && payment && evt.payload?.order?.entity) {
+        // order.paid carries the order entity — and our businessId lives in the ORDER's notes.
+        const order = evt.payload.order.entity;
+        const businessId = orderBusinessId({ notes: order.notes ?? [] });
+        if (businessId) await creditWallet(businessId, payment.id, order.amount_paid);
+      } else if (evt.event === 'payment.captured' && payment?.order_id) {
+        // payment.captured only has the payment entity: look the order up for its notes.
+        const order = await fetchRazorpayOrder(payment.order_id);
+        const businessId = orderBusinessId(order);
+        if (businessId && order.status === 'paid') await creditWallet(businessId, payment.id, payment.amount);
       }
+    } catch (err) {
+      logger.error({ err }, 'Webhook credit failed');
+      return res.status(500).json({ ok: false }); // Razorpay retries
     }
     res.json({ ok: true });
   },

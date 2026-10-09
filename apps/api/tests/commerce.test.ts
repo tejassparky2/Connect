@@ -109,7 +109,7 @@ describe('ad wallet & self-serve campaigns', () => {
   it('full lifecycle: draft → launch (reserve) → serve in radius → billed impressions → end (refund)', async () => {
     const { owner, biz } = await bizOwner();
     const est = await owner.get(`/v1/ads/estimate?businessId=${biz.id}&radiusM=3000`);
-    expect(est.body.verifiedHouseholds).toBeGreaterThanOrEqual(1);
+    expect(est.body).toMatchObject({ verifiedHouseholds: 0, approximate: true }); // bucketed: <10
 
     const c = await owner.post('/v1/ads/campaigns', { businessId: biz.id, headline: 'New café in HSR!', body: 'Filter coffee 2 minutes from you. 20% off this week.', cta: 'WHATSAPP', radiusM: 2000, budgetPaise: 10000, cpmPaise: 5000, endAt: new Date(Date.now() + 7 * 86400_000).toISOString() });
     expect(c.status).toBe(201);

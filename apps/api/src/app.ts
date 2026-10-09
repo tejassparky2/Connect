@@ -25,7 +25,7 @@ import { paymentsRouter, razorpayWebhook } from './modules/payments.routes';
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', /^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) : env.TRUST_PROXY);
+  app.set('trust proxy', /^\d+$/.test(env.TRUST_PROXY) ? Number(env.TRUST_PROXY) || false : env.TRUST_PROXY);
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   const origins = env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);

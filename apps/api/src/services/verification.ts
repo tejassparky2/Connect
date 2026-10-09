@@ -21,6 +21,7 @@ import { notifyLater } from './notify';
 const VOUCH_RADIUS_M = 1000;
 const MAX_VOUCHES_PER_30D = 5;
 const SOCIETY_MATCH_RADIUS_M = 500;
+const VOUCHED_VOUCHER_MIN_AGE_DAYS = 30;
 
 export async function getPrimaryAddress(userId: string) {
   return prisma.address.findFirst({ where: { userId, isPrimary: true }, orderBy: { createdAt: 'desc' } });
@@ -67,8 +68,8 @@ export async function recomputeLevel(userId: string): Promise<VerificationLevel>
         address.status = 'VERIFIED';
       }
     }
-    if (address.status === 'VERIFIED') level = VerificationLevel.ADDRESS;
-    else if (gps.done) level = VerificationLevel.LOCATION;
+    // ADDRESS always requires on-device presence too (an RWA approval alone isn't enough).
+    if (gps.done) level = address.status === 'VERIFIED' ? VerificationLevel.ADDRESS : VerificationLevel.LOCATION;
   }
   const prev = await prisma.user.findUnique({ where: { id: userId }, select: { verificationLevel: true } });
   if (prev && prev.verificationLevel !== level) {
@@ -91,8 +92,6 @@ export async function recordGpsCheck(userId: string, input: { lat: number; lng: 
   const home = await getPoint('addresses', address.id);
   if (!home) throw badRequest('Address has no location');
 
-  const recent = await prisma.locationCheck.count({ where: { userId, createdAt: { gt: new Date(Date.now() - 3600_000) } } });
-  if (recent >= 10) throw tooMany('Too many location checks. Try again later.');
 
   const distanceM = await distanceBetween(home, input);
   const reasons: string[] = [];
@@ -101,13 +100,19 @@ export async function recordGpsCheck(userId: string, input: { lat: number; lng: 
   if (distanceM > env.GPS_MAX_DISTANCE_M) reasons.push(`You appear to be ${Math.round(distanceM)} m from your home pin. Run this check while at home.`);
   const passed = reasons.length === 0;
 
-  // `location` is a required Unsupported column → insert via parameterised raw SQL.
-  const rows = await prisma.$queryRaw<{ id: string }[]>`
-    INSERT INTO location_checks (id, "userId", "addressId", location, "accuracyM", "distanceM", passed, "isMocked")
-    VALUES (gen_random_uuid(), ${userId}::uuid, ${address.id}::uuid, ${pointSql(input)},
-            ${input.accuracyM}::float8, ${distanceM}::float8, ${passed}, ${!!input.isMocked})
-    RETURNING id`;
-  const checkId = rows[0].id;
+  // `location` is a required Unsupported column → parameterised raw SQL. The per-user advisory
+  // lock makes the hourly cap race-free.
+  const checkId = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'gps:' + userId}))`;
+    const recent = await tx.locationCheck.count({ where: { userId, createdAt: { gt: new Date(Date.now() - 3600_000) } } });
+    if (recent >= 10) throw tooMany('Too many location checks. Try again later.');
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      INSERT INTO location_checks (id, "userId", "addressId", location, "accuracyM", "distanceM", passed, "isMocked")
+      VALUES (gen_random_uuid(), ${userId}::uuid, ${address.id}::uuid, ${pointSql(input)},
+              ${input.accuracyM}::float8, ${distanceM}::float8, ${passed}, ${!!input.isMocked})
+      RETURNING id`;
+    return rows[0].id;
+  });
 
   const level = await recomputeLevel(userId);
   return { checkId, passed, distanceM: Math.round(distanceM), reasons, level, progress: await gpsProgress(address.id) };
@@ -126,11 +131,23 @@ export async function vouchForNeighbor(voucherId: string, voucheeId: string) {
   if (!vHome || !aLoc) throw badRequest('Location missing');
   if ((await distanceBetween(vHome, aLoc)) > VOUCH_RADIUS_M) throw forbidden('You can only vouch for neighbours within 1 km of your home');
 
-  const given = await prisma.vouch.count({ where: { voucherId, createdAt: { gt: new Date(Date.now() - 30 * 86400_000) } } });
-  if (given >= MAX_VOUCHES_PER_30D) throw tooMany('You can vouch for at most 5 neighbours per month');
+  // Anti-ring: a voucher who was themselves verified by neighbour vouches must be an
+  // established account before their vouches count; mutual vouching is not allowed.
+  const voucherAddr = await getPrimaryAddress(voucherId);
+  const voucherAge = Date.now() - (await prisma.user.findUniqueOrThrow({ where: { id: voucherId }, select: { createdAt: true } })).createdAt.getTime();
+  if (voucherAddr?.method === 'NEIGHBOR_VOUCH' && voucherAge < VOUCHED_VOUCHER_MIN_AGE_DAYS * 86400_000)
+    throw forbidden(`Residents verified by vouches can vouch for others after ${VOUCHED_VOUCHER_MIN_AGE_DAYS} days`);
+  if (await prisma.vouch.findUnique({ where: { voucherId_voucheeId: { voucherId: voucheeId, voucheeId: voucherId } } }))
+    throw forbidden("You can't vouch for someone who vouched for you");
 
-  if (await prisma.vouch.findUnique({ where: { voucherId_voucheeId: { voucherId, voucheeId } } })) throw conflict('You have already vouched for this neighbour');
-  await prisma.vouch.create({ data: { voucherId, voucheeId, addressId: address.id } });
+  // Serialize per voucher so the monthly cap can't be raced with parallel requests.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'vouch:' + voucherId}))`;
+    const given = await tx.vouch.count({ where: { voucherId, createdAt: { gt: new Date(Date.now() - 30 * 86400_000) } } });
+    if (given >= MAX_VOUCHES_PER_30D) throw tooMany('You can vouch for at most 5 neighbours per month');
+    if (await tx.vouch.findUnique({ where: { voucherId_voucheeId: { voucherId, voucheeId } } })) throw conflict('You have already vouched for this neighbour');
+    await tx.vouch.create({ data: { voucherId, voucheeId, addressId: address.id } });
+  });
   notifyLater([voucheeId], { type: 'VOUCH_RECEIVED', title: 'A neighbour vouched for you', body: `${voucher.name ?? 'A neighbour'} confirmed you live nearby.` });
   const level = await recomputeLevel(voucheeId);
   return { level, vouches: await prisma.vouch.count({ where: { addressId: address.id } }), required: env.VOUCHES_REQUIRED };
@@ -155,4 +172,16 @@ export async function applySocietyApproval(userId: string, societyId: string, me
 export async function isApprovedMember(userId: string, societyId: string) {
   const m = await prisma.societyMembership.findUnique({ where: { societyId_userId: { societyId, userId } } });
   return m?.status === MembershipStatus.APPROVED ? m : null;
+}
+
+/**
+ * Membership ended (left, removed, or a race left it REJECTED): if the address was
+ * verified BY this society, that evidence is gone — revert to PENDING and recompute.
+ */
+export async function revokeSocietyVerification(userId: string, societyId: string) {
+  await prisma.address.updateMany({
+    where: { userId, isPrimary: true, societyId, status: 'VERIFIED', method: { in: ['SOCIETY_ADMIN', 'INVITE_CODE'] } },
+    data: { status: 'PENDING', method: null, verifiedAt: null },
+  });
+  return recomputeLevel(userId);
 }

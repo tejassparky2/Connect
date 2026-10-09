@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { signPaySession } from '../src/modules/payments.routes';
 import { app, locationVerified, prisma, resetDb } from './helpers';
 
@@ -15,15 +15,33 @@ async function business() {
 const sign = (body: string) => crypto.createHmac('sha256', 'whsec_test_secret').update(body).digest('hex');
 
 describe('Razorpay webhook', () => {
-  it('credits the wallet once on payment.captured with a valid signature', async () => {
+  it('credits the wallet once on order.paid (businessId from the ORDER notes)', async () => {
     const { bizId } = await business();
-    const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_WH1', amount: 75000, notes: { businessId: bizId } } } } });
+    const body = JSON.stringify({
+      event: 'order.paid',
+      payload: { payment: { entity: { id: 'pay_WH1', amount: 75000, order_id: 'order_1', notes: [] } }, order: { entity: { id: 'order_1', amount_paid: 75000, notes: { businessId: bizId } } } },
+    });
     const send = () => request(app).post('/pay/webhook').set('Content-Type', 'application/json').set('X-Razorpay-Signature', sign(body)).send(body);
     expect((await send()).status).toBe(200);
     expect((await send()).status).toBe(200); // retried delivery
     const biz = await prisma.business.findUniqueOrThrow({ where: { id: bizId } });
     expect(biz.walletPaise).toBe(75000);
     expect(await prisma.walletTransaction.count({ where: { businessId: bizId } })).toBe(1);
+  });
+
+  it('payment.captured (no order notes in payload) looks the order up and credits', async () => {
+    const { bizId } = await business();
+    const realFetch = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input) === 'https://api.razorpay.com/v1/orders/order_2')
+        return new Response(JSON.stringify({ id: 'order_2', amount: 50000, amount_paid: 50000, status: 'paid', notes: { businessId: bizId } }), { status: 200 });
+      return realFetch(input, init);
+    });
+    const body = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_WH2', amount: 50000, order_id: 'order_2', notes: [] } } } });
+    const r = await request(app).post('/pay/webhook').set('Content-Type', 'application/json').set('X-Razorpay-Signature', sign(body)).send(body);
+    spy.mockRestore();
+    expect(r.status).toBe(200);
+    expect((await prisma.business.findUniqueOrThrow({ where: { id: bizId } })).walletPaise).toBe(50000);
   });
 
   it('rejects bad signatures', async () => {

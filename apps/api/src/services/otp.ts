@@ -25,11 +25,11 @@ export interface OtpVerifyResult {
 
 interface OtpProvider {
   send(phone: string, ip?: string): Promise<OtpSendResult>;
-  verify(phone: string, code: string): Promise<OtpVerifyResult>;
+  verify(phone: string, code: string, ip?: string): Promise<OtpVerifyResult>;
 }
 
 const MAX_ATTEMPTS = 5;
-const RESEND_COOLDOWN_MS = 30_000;
+const RESEND_COOLDOWN_MS = 60_000; // matches Supabase Auth's default SMS max frequency
 const MAX_SENDS_PER_WINDOW = 5;
 const WINDOW_MS = 60 * 60_000;
 
@@ -62,11 +62,13 @@ const devProvider: OtpProvider = {
       orderBy: { createdAt: 'desc' },
     });
     if (!challenge) throw unauthorized('OTP expired. Please request a new one.');
-    if (challenge.attempts >= MAX_ATTEMPTS) throw tooMany('Too many wrong attempts. Request a new OTP.');
+    // Claim an attempt atomically BEFORE comparing, so parallel guesses can't exceed the cap.
+    const claimed = await prisma.otpChallenge.updateMany({ where: { id: challenge.id, attempts: { lt: MAX_ATTEMPTS } }, data: { attempts: { increment: 1 } } });
+    if (claimed.count !== 1) throw tooMany('Too many wrong attempts. Request a new OTP.');
     const ok = crypto.timingSafeEqual(Buffer.from(challenge.codeHash), Buffer.from(hmac(phone, code)));
     if (!ok) {
-      await prisma.otpChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
-      throw unauthorized(`Incorrect OTP. ${MAX_ATTEMPTS - challenge.attempts - 1} attempts left.`);
+      const left = Math.max(0, MAX_ATTEMPTS - challenge.attempts - 1);
+      throw unauthorized(left ? `Incorrect OTP. ${left} attempt${left === 1 ? '' : 's'} left.` : 'Incorrect OTP. Request a new one.');
     }
     // Atomic consume: a code can be used exactly once even under concurrent requests.
     const consumed = await prisma.otpChallenge.updateMany({ where: { id: challenge.id, consumedAt: null }, data: { consumedAt: new Date() } });
@@ -75,12 +77,23 @@ const devProvider: OtpProvider = {
   },
 };
 
+/**
+ * Headers for server-to-Supabase calls. Supabase applies per-IP limits; since every call
+ * comes from this server, forward the END-USER IP (Sb-Forwarded-For) — this requires a
+ * secret API key and "IP address forwarding" enabled in the project. Without it, the
+ * per-IP limits (30 req / 5 min) become an app-wide cap.
+ */
+function supabaseHeaders(ip?: string): Record<string, string> {
+  const key = env.SUPABASE_SECRET_KEY || env.SUPABASE_ANON_KEY;
+  return { apikey: key, 'Content-Type': 'application/json', ...(ip && env.SUPABASE_SECRET_KEY ? { 'Sb-Forwarded-For': ip } : {}) };
+}
+
 const supabaseProvider: OtpProvider = {
   async send(phone, ip) {
     await assertCanSend(phone);
     const res = await fetch(`${env.SUPABASE_URL}/auth/v1/otp`, {
       method: 'POST',
-      headers: { apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      headers: supabaseHeaders(ip),
       body: JSON.stringify({ phone, create_user: true, channel: 'sms' }),
     });
     if (!res.ok) {
@@ -92,12 +105,14 @@ const supabaseProvider: OtpProvider = {
     await prisma.otpChallenge.create({ data: { phone, codeHash: 'supabase', expiresAt: new Date(Date.now() + env.OTP_TTL_SECONDS * 1000), ip } });
     return {};
   },
-  async verify(phone, code) {
+  async verify(phone, code, ip) {
     const res = await fetch(`${env.SUPABASE_URL}/auth/v1/verify`, {
       method: 'POST',
-      headers: { apikey: env.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+      headers: supabaseHeaders(ip),
       body: JSON.stringify({ type: 'sms', phone, token: code }),
     });
+    // GoTrue: 403 otp_expired for wrong/expired codes; 429 over_request_rate_limit.
+    if (res.status === 429) throw tooMany('Too many attempts. Please wait a few minutes and try again.');
     if (!res.ok) throw unauthorized('Incorrect or expired OTP');
     const body = (await res.json()) as { user?: { id?: string; phone?: string } };
     const supaPhone = body.user?.phone ? `+${String(body.user.phone).replace(/^\+/, '')}` : undefined;

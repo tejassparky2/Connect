@@ -22,14 +22,26 @@ export async function createRazorpayOrder(amountPaise: number, receipt: string, 
   return (await res.json()) as { id: string; amount: number; currency: string };
 }
 
-export async function fetchRazorpayOrderAmount(orderId: string): Promise<number> {
+export interface RazorpayOrder {
+  id: string;
+  amount: number;
+  amount_paid: number;
+  status: 'created' | 'attempted' | 'paid';
+  notes: Record<string, string> | [];
+}
+
+/** Server-side source of truth for an order (amount + which business it belongs to). */
+export async function fetchRazorpayOrder(orderId: string): Promise<RazorpayOrder> {
   const auth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString('base64');
   const res = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}`, { headers: { Authorization: `Basic ${auth}` } });
   if (!res.ok) throw badRequest('Unknown payment order');
-  const body = (await res.json()) as { amount_paid: number; status: string };
-  if (body.status !== 'paid') throw badRequest('Payment not completed');
-  return body.amount_paid;
+  return (await res.json()) as RazorpayOrder;
 }
+
+export const orderBusinessId = (o: Pick<RazorpayOrder, 'notes'>) => (Array.isArray(o.notes) ? undefined : o.notes.businessId);
+
+/** Max wallet balance (₹10 lakh) — keeps int4 paise far from overflow and limits exposure. */
+export const MAX_WALLET_PAISE = 10_00_000_00;
 
 /** Razorpay signature = HMAC_SHA256(order_id + "|" + payment_id, key_secret). */
 export function verifyRazorpaySignature(orderId: string, paymentId: string, signature: string, secret = env.RAZORPAY_KEY_SECRET): boolean {

@@ -26,8 +26,10 @@ export default function OtpScreen() {
     return () => clearInterval(t);
   }, []);
 
+  const inFlight = useRef(false);
   const verify = async (value = code) => {
-    if (value.length !== 6) return;
+    if (value.length !== 6 || inFlight.current) return; // autofill + tap can fire twice
+    inFlight.current = true;
     setLoading(true);
     try {
       const r = await api.post<{ accessToken: string; refreshToken: string; user: Me }>('/auth/otp/verify', { phone: params.phone, code: value });
@@ -39,6 +41,7 @@ export default function OtpScreen() {
       setCode('');
       input.current?.focus();
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   };
@@ -101,7 +104,7 @@ export default function OtpScreen() {
           {cooldown > 0 ? (
             <Text className="text-sm font-semibold text-ink-400">Resend in {cooldown}s</Text>
           ) : (
-            <Pressable onPress={resend}>
+            <Pressable onPress={resend} hitSlop={12} accessibilityRole="button">
               <Text className="text-sm font-semibold text-brand-700">Resend OTP</Text>
             </Pressable>
           )}

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { mediaUrl, boundedDate } from '../lib/validators';
 import { Prisma, PostType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { badRequest, forbidden, notFound, tooMany } from '../lib/errors';
@@ -13,10 +14,11 @@ import {
   queryFeedIds,
   type FeedCursor,
 } from '../lib/geo';
-import { decodeCursor, encodeCursor } from '../lib/pagination';
+import { decodeCursor, encodeCursor, feedCursor } from '../lib/pagination';
 import { postInclude, publicUserSelect, toPost, toPublicUser } from '../lib/serializers';
 import { me, requireAuth, requireLevel, uuidParams } from '../middleware/auth';
 import { q, validate } from '../middleware/validate';
+import { perUser } from '../middleware/limits';
 import { clean, needsReview } from '../services/moderation';
 import { notifyLater, notifyRadiusLater } from '../services/notify';
 import { serveAdsFor } from './ads.routes';
@@ -61,7 +63,7 @@ postsRouter.get('/feed', validate('query', feedQuery), async (req, res) => {
   const user = me(req);
   const query = q<z.infer<typeof feedQuery>>(req);
   const home = await requireHome(user.id);
-  const cursor = decodeCursor<FeedCursor & Record<string, unknown>>(query.cursor);
+  const cursor = decodeCursor(query.cursor, feedCursor);
 
   // Radius is locked into the cursor so a scroll session never mixes radii.
   let radiusM = cursor?.r ?? clampRadius(query.radius, 500, MAX_RADIUS_M, user.feedRadiusM);
@@ -101,7 +103,7 @@ postsRouter.get('/feed', validate('query', feedQuery), async (req, res) => {
 const base = {
   body: z.string().trim().min(3).max(3000),
   title: z.string().trim().min(3).max(120).optional(),
-  images: z.array(z.string().url().max(500)).max(6).default([]),
+  images: z.array(mediaUrl).max(6).default([]),
 };
 
 const createSchema = z.discriminatedUnion('type', [
@@ -122,7 +124,7 @@ const createSchema = z.discriminatedUnion('type', [
     expiresInHours: z.number().int().min(1).max(72).default(24),
   }),
   z.object({ type: z.literal('LOST_FOUND'), ...base, title: z.string().trim().min(3).max(120) }),
-  z.object({ type: z.literal('EVENT'), ...base, title: z.string().trim().min(3).max(120), eventAt: z.coerce.date() }),
+  z.object({ type: z.literal('EVENT'), ...base, title: z.string().trim().min(3).max(120), eventAt: boundedDate }),
 ]);
 
 postsRouter.post('/posts', requireLevel('LOCATION'), validate('body', createSchema), async (req, res) => {
@@ -305,6 +307,7 @@ postsRouter.get('/posts/:id/comments', async (req, res) => {
 postsRouter.post(
   '/posts/:id/comments',
   requireLevel('LOCATION'),
+  perUser(60 * 60_000, 60, 'Too many comments in the last hour. Please slow down.'),
   validate('body', z.object({ body: z.string().trim().min(1).max(1000) })),
   async (req, res) => {
     const user = me(req);

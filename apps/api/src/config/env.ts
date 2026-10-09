@@ -7,7 +7,8 @@ const bool = z
   .transform((v) => v === 'true' || v === '1');
 
 const schema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  // No default on purpose: an unset NODE_ENV must not silently enable dev OTP/payments.
+  NODE_ENV: z.enum(['development', 'test', 'production']),
   PORT: z.coerce.number().int().positive().default(4000),
   PUBLIC_BASE_URL: z.string().url().default('http://localhost:4000'),
   CORS_ORIGINS: z.string().default('*'),
@@ -22,6 +23,8 @@ const schema = z.object({
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SUPABASE_URL: z.string().optional().default(''),
   SUPABASE_ANON_KEY: z.string().optional().default(''),
+  /** Preferred: an sb_secret_… key (required for Sb-Forwarded-For per-user rate limiting). */
+  SUPABASE_SECRET_KEY: z.string().optional().default(''),
   UPLOAD_DRIVER: z.enum(['local', 's3']).default('local'),
   UPLOAD_DIR: z.string().default('./uploads'),
   S3_BUCKET: z.string().optional().default(''),
@@ -42,7 +45,8 @@ const schema = z.object({
   GPS_MAX_DISTANCE_M: z.coerce.number().positive().default(200),
   GPS_MAX_ACCURACY_M: z.coerce.number().positive().default(150),
   VOUCHES_REQUIRED: z.coerce.number().int().min(1).default(2),
-  TRUST_PROXY: z.string().default('1'),
+  /** Number of reverse-proxy hops in front of the API (0 = none). Wrong values let clients spoof IPs via X-Forwarded-For. */
+  TRUST_PROXY: z.string().default('0'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -63,8 +67,8 @@ if (isProd) {
   if (env.CORS_ORIGINS.trim() === '*') problems.push('CORS_ORIGINS must be an explicit allow-list in production');
   if (/change-me/i.test(env.JWT_ACCESS_SECRET + env.JWT_REFRESH_SECRET + env.OTP_SECRET))
     problems.push('JWT/OTP secrets still contain placeholder values');
-  if (env.OTP_PROVIDER === 'supabase' && (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY))
-    problems.push('SUPABASE_URL and SUPABASE_ANON_KEY are required when OTP_PROVIDER=supabase');
+  if (env.OTP_PROVIDER === 'supabase' && (!env.SUPABASE_URL || !(env.SUPABASE_SECRET_KEY || env.SUPABASE_ANON_KEY)))
+    problems.push('SUPABASE_URL and SUPABASE_SECRET_KEY are required when OTP_PROVIDER=supabase');
   if (problems.length) {
     // eslint-disable-next-line no-console
     console.error('❌ Refusing to start:\n  ' + problems.join('\n  '));

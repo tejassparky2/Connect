@@ -74,7 +74,13 @@ async function request<T>(method: Method, path: string, body?: unknown, retry = 
   }
 
   const text = await res.text();
-  const json = text ? JSON.parse(text) : null;
+  let json: { error?: { code?: string; message?: string; details?: unknown } } | null = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    // Proxies/CDNs return HTML on 502/504/413 — surface a friendly error, not a JSON SyntaxError.
+    throw new ApiError(res.status, 'BAD_RESPONSE', res.status >= 500 ? 'Server is temporarily unavailable. Please try again.' : `Unexpected response (${res.status})`);
+  }
   if (!res.ok) {
     const e = json?.error ?? {};
     throw new ApiError(res.status, e.code ?? 'ERROR', e.message ?? `Request failed (${res.status})`, e.details);
