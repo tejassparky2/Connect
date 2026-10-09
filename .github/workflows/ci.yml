@@ -55,13 +55,14 @@ jobs:
       - name: Start GoTrue
         run: |
           docker run -d --name gotrue --network host \
-            -e GOTRUE_API_HOST=127.0.0.1 -e PORT=9999 -e API_EXTERNAL_URL=http://localhost:9999 \
+            -e GOTRUE_API_HOST=127.0.0.1 -e PORT=9999 -e API_EXTERNAL_URL=http://localhost:9999 -e GOTRUE_SITE_URL=http://localhost:3000 \
             -e GOTRUE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long \
             -e GOTRUE_DB_DRIVER=postgres -e DB_NAMESPACE=auth \
             -e "GOTRUE_DB_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/gotrue?search_path=auth&sslmode=disable" \
             -e GOTRUE_EXTERNAL_PHONE_ENABLED=true -e GOTRUE_SMS_AUTOCONFIRM=true -e GOTRUE_SMS_MAX_FREQUENCY=5s \
             -e "GOTRUE_SMS_TEST_OTP=919900012345:123456,919900054321:654321" supabase/gotrue:v2.177.0
           for i in $(seq 1 60); do curl -sf http://localhost:9999/health && break; sleep 1; done
+          curl -sf http://localhost:9999/health || { docker logs gotrue | tail -50; exit 1; }
       - run: npm ci
       - run: npm run db:generate -w apps/api
       - run: npx prisma migrate deploy

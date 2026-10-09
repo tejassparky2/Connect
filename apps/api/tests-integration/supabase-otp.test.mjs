@@ -2,7 +2,7 @@
  * Integration test against a REAL Supabase Auth (GoTrue) server.
  *
  *   docker run -d --name gotrue-test --network host \
- *     -e GOTRUE_API_HOST=127.0.0.1 -e PORT=9999 -e API_EXTERNAL_URL=http://localhost:9999 \
+ *     -e GOTRUE_API_HOST=127.0.0.1 -e PORT=9999 -e API_EXTERNAL_URL=http://localhost:9999 -e GOTRUE_SITE_URL=http://localhost:3000 \
  *     -e GOTRUE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long \
  *     -e GOTRUE_DB_DRIVER=postgres -e DB_NAMESPACE=auth \
  *     -e "GOTRUE_DB_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/gotrue?search_path=auth&sslmode=disable" \
@@ -47,7 +47,13 @@ before(async () => {
   }).listen(GW_PORT);
 
   api = spawn('npx', ['tsx', 'src/server.ts'], {
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(API_PORT), OTP_PROVIDER: 'supabase', SUPABASE_URL: `http://localhost:${GW_PORT}`, SUPABASE_SECRET_KEY: KEY, LOG_LEVEL: 'warn', TRUST_PROXY: '1' },
+    env: {
+      // Self-contained: don't depend on a local apps/api/.env (absent in CI).
+      JWT_ACCESS_SECRET: 'integration-access-secret-0123456789abcdef',
+      JWT_REFRESH_SECRET: 'integration-refresh-secret-0123456789abcdef',
+      OTP_SECRET: 'integration-otp-secret-0123456789',
+      ...process.env,
+      NODE_ENV: 'development', PORT: String(API_PORT), OTP_PROVIDER: 'supabase', SUPABASE_URL: `http://localhost:${GW_PORT}`, SUPABASE_SECRET_KEY: KEY, LOG_LEVEL: 'warn', TRUST_PROXY: '1' },
     stdio: 'inherit',
     detached: true, // own process group so teardown kills npx AND the tsx server it spawns
   });
