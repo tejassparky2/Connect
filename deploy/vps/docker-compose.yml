@@ -1,0 +1,69 @@
+# Mohalla Connect on a single VPS: PostGIS + API + Caddy (automatic HTTPS via Let's Encrypt).
+# Normally started by ./install.sh, which writes .env next to this file.
+name: mohalla
+
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mohalla
+      POSTGRES_USER: mohalla
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?run install.sh first}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mohalla -d mohalla"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No published port: only the API can reach the database.
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://mohalla:${DB_PASSWORD}@db:5432/mohalla?schema=public
+      PUBLIC_BASE_URL: https://${DOMAIN:?set DOMAIN}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?}
+      OTP_SECRET: ${OTP_SECRET:?}
+      OTP_PROVIDER: ${OTP_PROVIDER:-dev}
+      DEMO_MODE: ${DEMO_MODE:-true}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      # The mobile app doesn't use CORS; no browser origin is allowed.
+      CORS_ORIGINS: https://${DOMAIN}
+      TRUST_PROXY: "1" # behind Caddy
+      GPS_CHECK_MIN_GAP_HOURS: ${GPS_CHECK_MIN_GAP_HOURS:-0}
+      PUSH_ENABLED: "false"
+    volumes:
+      - uploads:/app/apps/api/uploads # photos survive restarts and redeploys
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

@@ -42,7 +42,7 @@ npx expo start                    # press w for web, a for Android, i for iOS
 # On a physical phone set the API address: EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:4000 npx expo start
 ```
 
-**Host a demo online (free, Render):** see [docs/DEPLOY_DEMO.md](docs/DEPLOY_DEMO.md).
+**Host it on your own VPS (one command, automatic HTTPS):** see [docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md). Or a free Render demo: [docs/DEPLOY_DEMO.md](docs/DEPLOY_DEMO.md).
 
 **Install on an Android phone without Expo Go:** see [docs/ANDROID_TEST_APK.md](docs/ANDROID_TEST_APK.md). A sideloadable test APK asks for your server address on first launch.
 
