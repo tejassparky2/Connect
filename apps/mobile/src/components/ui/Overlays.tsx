@@ -47,8 +47,17 @@ export function BottomSheet({ visible, onClose, children, testID }: { visible: b
       </Animated.View>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
         <Animated.View
-          style={{ transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) }], paddingBottom: insets.bottom + 12, maxHeight: '92%' }}
-          className="rounded-t-3xl bg-white px-5 pt-3"
+          // Plain styles (not className): NativeWind classes on Animated.View are dropped on web.
+          style={{
+            transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) }],
+            paddingBottom: insets.bottom + 12,
+            maxHeight: '92%',
+            backgroundColor: '#FFFFFF',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            paddingHorizontal: 20,
+            paddingTop: 12,
+          }}
         >
           <View className="mb-3 h-1.5 w-10 self-center rounded-full bg-ink-200" />
           {children}

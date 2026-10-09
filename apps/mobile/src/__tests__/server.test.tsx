@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import * as SecureStore from 'expo-secure-store';
 import { api } from '@/lib/api';
 import { getApiUrl, loadApiUrlOverride, normalizeServerUrl, setApiUrlOverride } from '@/lib/config';
-import { ServerSettings } from '@/components/ServerSettings';
+import { ServerSettings, ServerSheetHost } from '@/components/ServerSettings';
 import { mockFetch, withQuery } from './testUtils';
 
 afterEach(async () => {
@@ -27,7 +27,7 @@ test('an unreachable server is rejected and nothing is saved', async () => {
     throw new TypeError('Network request failed');
   }) as unknown as typeof fetch;
   const before = getApiUrl();
-  const { ui } = withQuery(<ServerSettings />);
+  const { ui } = withQuery(<><ServerSettings /><ServerSheetHost /></>);
   await render(ui);
   await fireEvent.press(screen.getByTestId('server-settings'));
   await fireEvent.changeText(screen.getByTestId('server-url'), '10.9.9.9:4000');
@@ -42,7 +42,7 @@ test('a healthy server is saved, persisted, and used for API calls (also after r
     { method: 'GET', path: 'http://192.168.1.20:4000/health', body: { ok: true, db: 'up' } },
     { method: 'GET', path: /\/v1\/me\/badges$/, body: { notifications: 0, messages: 0 } },
   ]);
-  const { ui } = withQuery(<ServerSettings />);
+  const { ui } = withQuery(<><ServerSettings /><ServerSheetHost /></>);
   await render(ui);
   await fireEvent.press(screen.getByTestId('server-settings'));
   await fireEvent.changeText(screen.getByTestId('server-url'), '192.168.1.20:4000');
@@ -76,7 +76,7 @@ describe('sideloaded test build (release, no server saved yet)', () => {
     const Welcome = require('@/app/(auth)/welcome').default as React.ComponentType;
     const { ToastHost } = require('@/components/ui/Overlays');
     mockFetch([{ method: 'GET', path: 'http://192.168.1.20:4000/health', body: { ok: true } }]);
-    const { ui } = withQuery(<><Welcome /><ToastHost /></>);
+    const { ui } = withQuery(<><Welcome /><ServerSheetHost /><ToastHost /></>);
     await render(ui);
     expect(screen.getByText(/Server: not set/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('get-started'));

@@ -14,6 +14,7 @@ import { useMe } from '@/hooks/useMe';
 import { NotificationTapRouter, usePushRegistration } from '@/hooks/usePush';
 import { Button } from '@/components/ui';
 import { ConfirmHost, SheetHost, ToastHost } from '@/components/ui/Overlays';
+import { ServerSheetHost } from '@/components/ServerSettings';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 onSignOut(() => queryClient.clear());
@@ -91,6 +92,7 @@ export default function RootLayout() {
             <BootError />
             {/* Order matters: later = on top. */}
             <SheetHost />
+            <ServerSheetHost />
             <ConfirmHost />
             <ToastHost />
           </View>

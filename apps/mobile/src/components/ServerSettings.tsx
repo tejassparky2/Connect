@@ -22,22 +22,48 @@ async function probe(url: string): Promise<string | null> {
   }
 }
 
-const useServerSheet = create<{ open: boolean; required: boolean; onSaved?: () => void }>(() => ({ open: false, required: false }));
+interface ServerSheetState {
+  open: boolean;
+  required: boolean;
+  onSaved?: () => void;
+  /** Bumped on save/reset so the inline link re-renders with the new address. */
+  version: number;
+}
+const useServerSheet = create<ServerSheetState>(() => ({ open: false, required: false, version: 0 }));
 
 /** Open the server sheet; `onSaved` runs after a server passes the health check (e.g. continue to sign-in). */
 export const askForServer = (onSaved?: () => void) => useServerSheet.setState({ open: true, required: true, onSaved });
+const openServerSheet = () => useServerSheet.setState({ open: true, required: false, onSaved: undefined });
+const closeServerSheet = () => useServerSheet.setState({ open: false, onSaved: undefined });
+const bump = () => useServerSheet.setState((s) => ({ version: s.version + 1 }));
 
-/** "Server: … · Change" link + sheet. Rendered only in test builds (see SERVER_SWITCH_ENABLED). */
+/** Inline "Server: … · Change" link (welcome screen). Rendered only in test builds (see SERVER_SWITCH_ENABLED). */
 export function ServerSettings() {
+  useServerSheet((s) => s.version); // re-render after the address changes
+  if (!SERVER_SWITCH_ENABLED) return null;
+  const set = hasUsableServer();
+  return (
+    <Pressable testID="server-settings" accessibilityRole="button" onPress={openServerSheet} hitSlop={8} className="mt-2 flex-row items-center justify-center">
+      <Icon name="server-outline" size={12} color="#94A3B8" />
+      <Text numberOfLines={1} className="ml-1 text-xs text-ink-400">
+        Server: {set ? getApiUrl().replace(/^https?:\/\//, '') : 'not set'} · <Text className="font-semibold text-brand-700">{set ? 'Change' : 'Set up'}</Text>
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * The server sheet itself. Mounted once at the app root (like the other overlay hosts) so it covers the
+ * whole screen — BottomSheet fills its parent, so rendering it inside a small container clips it.
+ */
+export function ServerSheetHost() {
   const { open, required, onSaved } = useServerSheet();
-  const setOpen = (o: boolean) => useServerSheet.setState(o ? { open: true, required: false, onSaved: undefined } : { open: false, onSaved: undefined });
-  const [current, setCurrent] = useState(getApiUrl());
-  const [value, setValue] = useState(current);
+  const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (open) {
-      setValue(required ? '' : getApiUrl());
+      setValue(required || !hasUsableServer() ? '' : getApiUrl());
       setError(null);
     }
   }, [open, required]);
@@ -45,39 +71,38 @@ export function ServerSettings() {
 
   const save = async () => {
     const url = normalizeServerUrl(value);
-    if (!url) return setError('Enter an address like 192.168.1.20:4000');
+    if (!url) return setError('Enter an address like mohalla-connect-api.onrender.com');
     setBusy(true);
     setError(null);
     const problem = await probe(url);
     setBusy(false);
     if (problem) return setError(problem);
     await setApiUrlOverride(url);
-    setCurrent(url);
+    bump();
     const next = onSaved;
-    setOpen(false);
+    closeServerSheet();
     toast.success('Connected to server');
     next?.();
   };
 
+  const reset = async () => {
+    await setApiUrlOverride(null);
+    bump();
+    setValue('');
+    setError(null);
+  };
+
   return (
-    <>
-      <Pressable testID="server-settings" accessibilityRole="button" onPress={() => setOpen(true)} hitSlop={8} className="mt-2 flex-row items-center justify-center">
-        <Icon name="server-outline" size={12} color="#94A3B8" />
-        <Text numberOfLines={1} className="ml-1 text-xs text-ink-400">
-          Server: {hasUsableServer() ? current.replace(/^https?:\/\//, '') : 'not set'} · <Text className="font-semibold text-brand-700">{hasUsableServer() ? 'Change' : 'Set up'}</Text>
-        </Text>
-      </Pressable>
-      <BottomSheet visible={open} onClose={() => setOpen(false)} testID="server-sheet">
-        <Text className="text-xl font-extrabold text-ink-900">{required ? 'First, connect to your server' : 'Server address'}</Text>
-        <Text className="mb-4 mt-1 text-sm leading-5 text-ink-500">
-          Enter your Mohalla Connect server: a hosted address like mohalla-connect-api.onrender.com, or your computer's Wi-Fi IP and port (192.168.1.20:4000). A sleeping server can take a minute to answer.
-        </Text>
-        <Field testID="server-url" label="API address" placeholder="mohalla-connect-api.onrender.com" value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" error={error} />
-        <View className="flex-row">
-          <Button title="Reset" variant="secondary" className="mr-3" onPress={async () => { await setApiUrlOverride(null); const d = getApiUrl(); setCurrent(d); setValue(d); setError(null); }} />
-          <Button testID="server-save" title="Test & save" className="flex-1" loading={busy} onPress={save} />
-        </View>
-      </BottomSheet>
-    </>
+    <BottomSheet visible={open} onClose={closeServerSheet} testID="server-sheet">
+      <Text className="text-xl font-extrabold text-ink-900">{required ? 'First, connect to your server' : 'Server address'}</Text>
+      <Text className="mb-4 mt-1 text-sm leading-5 text-ink-500">
+        Enter your Mohalla Connect server: a hosted address like mohalla-connect-api.onrender.com, or your computer's Wi-Fi IP and port (192.168.1.20:4000). A sleeping server can take a minute to answer.
+      </Text>
+      <Field testID="server-url" label="API address" placeholder="mohalla-connect-api.onrender.com" value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" error={error} />
+      <View className="flex-row">
+        <Button title="Reset" variant="secondary" className="mr-3" onPress={reset} />
+        <Button testID="server-save" title={busy ? 'Connecting…' : 'Test & save'} className="flex-1" loading={busy} onPress={save} />
+      </View>
+    </BottomSheet>
   );
 }
