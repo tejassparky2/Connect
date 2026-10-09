@@ -19,6 +19,20 @@ export class ApiError extends Error {
 
 let refreshing: Promise<boolean> | null = null;
 
+/** Requests never hang: an unreachable server can otherwise leave a spinner up for minutes. */
+const TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 120_000; // images on slow mobile data
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Single-flight refresh: concurrent 401s share one refresh call (rotation would otherwise revoke the family). */
 async function refreshTokens(): Promise<boolean> {
   if (refreshing) return refreshing;
@@ -26,11 +40,11 @@ async function refreshTokens(): Promise<boolean> {
     const { refreshToken, setTokens, signOut } = useAuth.getState();
     if (!refreshToken) return false;
     try {
-      const res = await fetch(`${getApiUrl()}/v1/auth/refresh`, {
+      const res = await fetchWithTimeout(`${getApiUrl()}/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
-      });
+      }, TIMEOUT_MS);
       if (!res.ok) {
         if (res.status === 401) await signOut();
         return false;
@@ -56,7 +70,7 @@ async function request<T>(method: Method, path: string, body?: unknown, retry = 
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
   let res: Response;
   try {
-    res = await fetch(`${getApiUrl()}/v1${path}`, {
+    res = await fetchWithTimeout(`${getApiUrl()}/v1${path}`, {
       method,
       headers: {
         Accept: 'application/json',
@@ -64,7 +78,7 @@ async function request<T>(method: Method, path: string, body?: unknown, retry = 
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body == null ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
-    });
+    }, isForm ? UPLOAD_TIMEOUT_MS : TIMEOUT_MS);
   } catch {
     throw new ApiError(
       0,

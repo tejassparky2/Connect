@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '@/lib/api';
 import { normalizePhone } from '@/lib/format';
 import { toast } from '@/lib/toast';
+import { hasUsableServer } from '@/lib/config';
 import { Button, Field, Icon, IconButton } from '@/components/ui';
 
 export default function PhoneScreen() {
@@ -18,6 +19,7 @@ export default function PhoneScreen() {
     const e164 = normalizePhone(phone);
     if (!e164) return setError('Enter a valid 10-digit mobile number');
     if (!consent) return toast.error('Please accept the privacy notice to continue');
+    if (!hasUsableServer()) return toast.error('No server set yet. Go back and tap "Server · Set up" on the welcome screen.');
     setError(null);
     setLoading(true);
     try {

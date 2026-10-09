@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { getApiUrl, normalizeServerUrl, SERVER_SWITCH_ENABLED, setApiUrlOverride } from '@/lib/config';
+import { create } from 'zustand';
+import { getApiUrl, hasUsableServer, normalizeServerUrl, SERVER_SWITCH_ENABLED, setApiUrlOverride } from '@/lib/config';
 import { toast } from '@/lib/toast';
 import { BottomSheet } from '@/components/ui/Overlays';
 import { Button, Field, Icon } from '@/components/ui';
@@ -21,13 +22,25 @@ async function probe(url: string): Promise<string | null> {
   }
 }
 
+const useServerSheet = create<{ open: boolean; required: boolean; onSaved?: () => void }>(() => ({ open: false, required: false }));
+
+/** Open the server sheet; `onSaved` runs after a server passes the health check (e.g. continue to sign-in). */
+export const askForServer = (onSaved?: () => void) => useServerSheet.setState({ open: true, required: true, onSaved });
+
 /** "Server: … · Change" link + sheet. Rendered only in test builds (see SERVER_SWITCH_ENABLED). */
 export function ServerSettings() {
-  const [open, setOpen] = useState(false);
+  const { open, required, onSaved } = useServerSheet();
+  const setOpen = (o: boolean) => useServerSheet.setState(o ? { open: true, required: false, onSaved: undefined } : { open: false, onSaved: undefined });
   const [current, setCurrent] = useState(getApiUrl());
   const [value, setValue] = useState(current);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setValue(required ? '' : getApiUrl());
+      setError(null);
+    }
+  }, [open, required]);
   if (!SERVER_SWITCH_ENABLED) return null;
 
   const save = async () => {
@@ -40,20 +53,22 @@ export function ServerSettings() {
     if (problem) return setError(problem);
     await setApiUrlOverride(url);
     setCurrent(url);
+    const next = onSaved;
     setOpen(false);
     toast.success('Connected to server');
+    next?.();
   };
 
   return (
     <>
-      <Pressable testID="server-settings" accessibilityRole="button" onPress={() => { setValue(current); setError(null); setOpen(true); }} hitSlop={8} className="mt-2 flex-row items-center justify-center">
+      <Pressable testID="server-settings" accessibilityRole="button" onPress={() => setOpen(true)} hitSlop={8} className="mt-2 flex-row items-center justify-center">
         <Icon name="server-outline" size={12} color="#94A3B8" />
         <Text numberOfLines={1} className="ml-1 text-xs text-ink-400">
-          Server: {current.replace(/^https?:\/\//, '')} · <Text className="font-semibold text-brand-700">Change</Text>
+          Server: {hasUsableServer() ? current.replace(/^https?:\/\//, '') : 'not set'} · <Text className="font-semibold text-brand-700">{hasUsableServer() ? 'Change' : 'Set up'}</Text>
         </Text>
       </Pressable>
       <BottomSheet visible={open} onClose={() => setOpen(false)} testID="server-sheet">
-        <Text className="text-xl font-extrabold text-ink-900">Server address</Text>
+        <Text className="text-xl font-extrabold text-ink-900">{required ? 'First, connect to your server' : 'Server address'}</Text>
         <Text className="mb-4 mt-1 text-sm leading-5 text-ink-500">
           This test build talks to your own Mohalla Connect API. Run it on your computer and enter the computer's Wi-Fi IP address and port.
         </Text>

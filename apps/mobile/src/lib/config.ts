@@ -32,6 +32,12 @@ const OVERRIDE_KEY = 'mc.apiUrl';
 const DEFAULT_URL = (BAKED_URL || defaultBase()).replace(/\/$/, '');
 let override: string | null = null;
 
+/**
+ * False only in a sideloaded test build where nobody has entered a server yet: its fallback
+ * (10.0.2.2 = the emulator's host alias) can't work on a real phone, so the UI must ask first.
+ */
+export const hasUsableServer = () => !!override || !!BAKED_URL || __DEV__;
+
 /** Current API base URL (no trailing slash). */
 export const getApiUrl = () => override ?? DEFAULT_URL;
 
