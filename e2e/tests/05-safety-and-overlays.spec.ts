@@ -4,7 +4,7 @@ import { expectToast, loginViaUi, randomPhone, shot, T, X } from './helpers';
 test('privacy notice is readable before sign-up', async ({ page }) => {
   await page.goto('/');
   await T(page, 'get-started').click();
-  await X(page, 'privacy notice').click();
+  await page.getByTestId('open-privacy').click();
   await expect(X(page, 'What neighbours can see')).toBeVisible();
   await expect(X(page, /Never your phone number/)).toBeVisible();
   await shot(page, '40-privacy');

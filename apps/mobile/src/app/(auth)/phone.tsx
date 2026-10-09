@@ -56,12 +56,15 @@ export default function PhoneScreen() {
         />
       </View>
       <View className="px-6" style={{ paddingBottom: insets.bottom + 20 }}>
-        <Pressable testID="consent" accessibilityRole="checkbox" accessibilityState={{ checked: consent }} onPress={() => setConsent(!consent)} className="mb-4 flex-row items-start">
+        {/* The link sits outside the checkbox's tap target so tapping the agreement text can't navigate away. */}
+        <Pressable testID="consent" accessibilityRole="checkbox" accessibilityState={{ checked: consent }} onPress={() => setConsent(!consent)} className="flex-row items-start">
           <Icon name={consent ? 'checkbox' : 'square-outline'} size={22} color="#0F766E" />
           <Text className="ml-2 flex-1 text-xs leading-4 text-ink-600">
-            I agree to the processing of my number, address and home location as described in the{' '}
-            <Text onPress={() => router.push('/privacy')} className="font-semibold text-brand-700 underline">privacy notice</Text>. I can withdraw by deleting my account.
+            I agree to the processing of my number, address and home location as described in the privacy notice. I can withdraw by deleting my account.
           </Text>
+        </Pressable>
+        <Pressable testID="open-privacy" accessibilityRole="link" onPress={() => router.push('/privacy')} hitSlop={8} className="mb-4 ml-8 mt-1 self-start">
+          <Text className="text-xs font-semibold text-brand-700 underline">Read the privacy notice</Text>
         </Pressable>
         <Button testID="send-otp" title="Send OTP" size="lg" loading={loading} disabled={phone.replace(/\D/g, '').length < 10 || !consent} onPress={submit} />
       </View>

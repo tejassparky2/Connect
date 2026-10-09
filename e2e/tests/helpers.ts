@@ -9,6 +9,7 @@ export async function loginViaUi(page: Page, phone: string) {
   await page.getByTestId('get-started').filter({ visible: true }).click();
   await page.getByTestId('phone-input').fill(phone);
   await page.getByTestId('consent').click(); // DPDP: affirmative consent before sign-up
+  await expect(page.getByTestId('send-otp')).toBeEnabled();
   await page.getByTestId('send-otp').click();
   const code = (await page.getByTestId('dev-code').textContent())!.trim();
   await page.getByTestId('otp-input').fill(code);
