@@ -2,16 +2,21 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ccr-*"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   api:
-    name: API — typecheck + integration tests (PostGIS)
+    name: API — typecheck + integration tests (PostGIS ${{ matrix.postgis }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgis: ["16-3.4", "17-3.5"]
     services:
       postgres:
-        image: postgis/postgis:16-3.4
+        image: postgis/postgis:${{ matrix.postgis }}
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
@@ -29,6 +34,41 @@ jobs:
       - run: npm run typecheck -w apps/api
       - run: npm test -w apps/api
       - run: npm run build -w apps/api
+
+  supabase-otp:
+    name: API ↔ real Supabase Auth (GoTrue) OTP
+    runs-on: ubuntu-latest
+    env:
+      PGPASSWORD: postgres
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mohalla_it?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Start PostGIS
+        run: |
+          docker run -d --name pg --network host -e POSTGRES_PASSWORD=postgres postgis/postgis:17-3.5
+          for i in $(seq 1 60); do docker exec pg pg_isready -U postgres && break; sleep 1; done
+          sleep 3
+          docker exec pg psql -U postgres -c 'CREATE DATABASE gotrue' -c 'CREATE DATABASE mohalla_it'
+          docker exec pg psql -U postgres -d gotrue -c 'CREATE SCHEMA auth'
+      - name: Start GoTrue
+        run: |
+          docker run -d --name gotrue --network host \
+            -e GOTRUE_API_HOST=127.0.0.1 -e PORT=9999 -e API_EXTERNAL_URL=http://localhost:9999 \
+            -e GOTRUE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long \
+            -e GOTRUE_DB_DRIVER=postgres -e DB_NAMESPACE=auth \
+            -e "GOTRUE_DB_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/gotrue?search_path=auth&sslmode=disable" \
+            -e GOTRUE_EXTERNAL_PHONE_ENABLED=true -e GOTRUE_SMS_AUTOCONFIRM=true -e GOTRUE_SMS_MAX_FREQUENCY=5s \
+            -e "GOTRUE_SMS_TEST_OTP=919900012345:123456,919900054321:654321" supabase/gotrue:v2.177.0
+          for i in $(seq 1 60); do curl -sf http://localhost:9999/health && break; sleep 1; done
+      - run: npm ci
+      - run: npm run db:generate -w apps/api
+      - run: npx prisma migrate deploy
+        working-directory: apps/api
+      - run: npm run test:supabase -w apps/api
+      - if: failure()
+        run: docker logs gotrue | tail -50
 
   mobile:
     name: Mobile — typecheck + unit tests + expo-doctor
