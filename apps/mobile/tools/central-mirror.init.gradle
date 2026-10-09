@@ -1,0 +1,32 @@
+// Route Maven Central traffic to Google's Maven Central mirror.
+// repo.maven.apache.org returns intermittent HTTP 429 through this network, and
+// plugins.gradle.org/m2 302-redirects most artifacts to repo.maven.apache.org.
+def MIRROR = 'https://maven-central.storage-download.googleapis.com/maven2/'
+def redirect = { RepositoryHandler repos ->
+  repos.configureEach { r ->
+    if (r instanceof MavenArtifactRepository) {
+      def h = r.url?.host
+      if (h == 'repo.maven.apache.org' || h == 'repo1.maven.org') { r.url = MIRROR }
+    }
+  }
+}
+def prepend = { RepositoryHandler repos ->
+  def r = repos.maven { url = MIRROR; name = 'CentralGcsMirrorFirst' }
+  repos.remove(r)
+  repos.add(0, r)
+}
+beforeSettings { s ->
+  redirect(s.pluginManagement.repositories)
+  redirect(s.dependencyResolutionManagement.repositories)
+  redirect(s.buildscript.repositories)
+}
+settingsEvaluated { s ->
+  def pm = s.pluginManagement.repositories
+  if (pm.isEmpty()) { pm.gradlePluginPortal() }
+  prepend(pm)
+}
+beforeProject { p ->
+  redirect(p.buildscript.repositories)
+  redirect(p.repositories)
+  prepend(p.buildscript.repositories)
+}
