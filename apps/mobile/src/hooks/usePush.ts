@@ -39,19 +39,6 @@ export async function unregisterPush() {
 /** Register this device for Expo push and deep-link on notification tap. No-op on web/simulators. */
 export function usePushRegistration() {
   const status = useAuth((s) => s.status);
-  const lastResponse = Notifications.useLastNotificationResponse();
-  const handled = useRef<string | null>(null);
-
-  // Handles taps that cold-started the app as well as taps while running (each response once).
-  useEffect(() => {
-    if (status !== 'signedIn' || !lastResponse) return;
-    const id = `${lastResponse.notification.request.identifier}:${lastResponse.actionIdentifier}`;
-    if (handled.current === id) return;
-    handled.current = id;
-    const d = lastResponse.notification.request.content.data as Record<string, unknown>;
-    router.push(routeForNotification(d ?? {}));
-  }, [status, lastResponse]);
-
   useEffect(() => {
     if (status !== 'signedIn' || Platform.OS === 'web' || !Device.isDevice) return;
     (async () => {
@@ -73,4 +60,24 @@ export function usePushRegistration() {
       }
     })();
   }, [status]);
+}
+
+/**
+ * Routes notification taps — including the tap that cold-started the app — to the right screen.
+ * Native only: getLastNotificationResponse doesn't exist on web, so this is a component that
+ * the root layout mounts only when Platform.OS !== 'web' (not a conditionally-called hook).
+ */
+export function NotificationTapRouter() {
+  const status = useAuth((s) => s.status);
+  const lastResponse = Notifications.useLastNotificationResponse();
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (status !== 'signedIn' || !lastResponse) return;
+    const id = `${lastResponse.notification.request.identifier}:${lastResponse.actionIdentifier}`;
+    if (handled.current === id) return;
+    handled.current = id;
+    const d = lastResponse.notification.request.content.data as Record<string, unknown>;
+    router.push(routeForNotification(d ?? {}));
+  }, [status, lastResponse]);
+  return null;
 }

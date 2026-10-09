@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -7,7 +7,7 @@ import { timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import type { ParkingAlert } from '@/lib/types';
 import { Header } from '@/components/ui/Header';
-import { confirm } from '@/components/ui/Overlays';
+import { BottomSheet, confirm } from '@/components/ui/Overlays';
 import { Button, Card, Chip, Field, Icon, IconButton, SectionTitle } from '@/components/ui';
 
 interface Vehicle { id: string; number: string; label: string | null }
@@ -106,19 +106,14 @@ export default function Parking() {
         </Card>
       </ScrollView>
 
-      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
-          <Pressable className="flex-1" onPress={() => setOpen(false)} />
-          <View className="rounded-t-3xl bg-white p-5 pb-10">
+      <BottomSheet visible={open} onClose={() => setOpen(false)}>
             <Text className="text-xl font-extrabold text-ink-900">🚗 Report a vehicle</Text>
             <Text className="mb-4 mt-1 text-sm text-ink-500">We'll alert the owner directly. No phone numbers shared.</Text>
             <Field testID="parking-plate" label="Vehicle number" placeholder="KA 01 AB 1234" autoCapitalize="characters" value={plate} onChangeText={setPlate} autoFocus />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">{QUICK.map((m) => <Chip key={m} label={m.length > 28 ? 'Blocking my car' : m} selected={message === m} onPress={() => setMessage(m)} />)}</ScrollView>
             <Field label="Where?" placeholder="e.g. B2 basement, slot 45" value={location} onChangeText={setLocation} maxLength={80} />
             <Button testID="send-parking" title="Alert owner now" variant="danger" size="lg" loading={busy} disabled={plate.replace(/\W/g, '').length < 6} onPress={send} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }

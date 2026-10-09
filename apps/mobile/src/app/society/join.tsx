@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { BottomSheet } from '@/components/ui/Overlays';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -28,6 +29,7 @@ export default function JoinSociety() {
       const r = await api.post<{ status: string; society: { id: string; name: string } }>('/societies/join', { ...(target.societyId ? { societyId: target.societyId } : { inviteCode: target.inviteCode }), tower: tower.trim() || undefined, unit: unit.trim(), occupancy });
       qc.invalidateQueries({ queryKey: ['my-societies'] });
       qc.invalidateQueries({ queryKey: ['me'] });
+      qc.invalidateQueries({ queryKey: ['verification'] });
       setTarget(null);
       if (r.status === 'APPROVED') {
         toast.success(`Welcome to ${r.society.name}! 🏠`);
@@ -65,7 +67,7 @@ export default function JoinSociety() {
               <Icon name="business" size={22} color="#0F766E" />
               <View className="ml-3 flex-1">
                 <View className="flex-row items-center">
-                  <Text className="mr-1 text-base font-bold text-ink-900">{s.name}</Text>
+                  <Text numberOfLines={1} className="mr-1 flex-shrink text-base font-bold text-ink-900">{s.name}</Text>
                   {s.isVerified ? <Icon name="checkmark-circle" size={14} color="#0F766E" /> : null}
                 </View>
                 <Text className="text-xs text-ink-500">{s.addressLine} · {formatDistance(s.distanceM)} · {s.memberCount} members</Text>
@@ -76,9 +78,7 @@ export default function JoinSociety() {
         ))}
       </ScrollView>
 
-      <Modal visible={!!target} transparent animationType="slide" onRequestClose={() => setTarget(null)}>
-        <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setTarget(null)}>
-          <Pressable onPress={() => undefined} className="rounded-t-3xl bg-white p-5 pb-10">
+      <BottomSheet visible={!!target} onClose={() => setTarget(null)}>
             <Text className="text-xl font-extrabold text-ink-900">Join {target?.name}</Text>
             <Text className="mb-4 mt-1 text-sm text-ink-500">Your RWA uses this to verify you're a resident.</Text>
             <View className="flex-row">
@@ -92,9 +92,7 @@ export default function JoinSociety() {
               ))}
             </View>
             <Button testID="submit-join" title="Request to join" size="lg" loading={busy} disabled={!unit.trim()} onPress={join} />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      </BottomSheet>
     </KeyboardAvoidingView>
   );
 }

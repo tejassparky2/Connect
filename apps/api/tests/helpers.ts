@@ -57,7 +57,7 @@ export function asUser(token: string) {
 export async function login(phone = nextPhone(), name?: string): Promise<TestUser> {
   const r1 = await request(app).post('/v1/auth/otp/request').send({ phone });
   if (r1.status !== 200) throw new Error(`otp request failed: ${r1.status} ${JSON.stringify(r1.body)}`);
-  const r2 = await request(app).post('/v1/auth/otp/verify').send({ phone, code: r1.body.devCode });
+  const r2 = await request(app).post('/v1/auth/otp/verify').send({ phone, code: r1.body.devCode, consent: true });
   if (r2.status !== 200) throw new Error(`otp verify failed: ${r2.status} ${JSON.stringify(r2.body)}`);
   const u = { id: r2.body.user.id, phone: r2.body.user.phone, token: r2.body.accessToken, refreshToken: r2.body.refreshToken, ...asUser(r2.body.accessToken) };
   if (name) await u.patch('/v1/me', { name });

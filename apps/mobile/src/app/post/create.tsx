@@ -10,7 +10,7 @@ import { toast } from '@/lib/toast';
 import type { Post, PostType } from '@/lib/types';
 import { useMe } from '@/hooks/useMe';
 import { ImagePickerRow } from '@/components/ImagePickerRow';
-import { Button, Chip, EmptyState, Field, IconButton } from '@/components/ui';
+import { Button, Chip, EmptyState, Field, Icon, IconButton } from '@/components/ui';
 
 const CONDITIONS = [
   { k: 'NEW', l: 'New' },
@@ -34,6 +34,8 @@ export default function CreatePost() {
   const [eventDate, setEventDate] = useState('');
   const [eventTime, setEventTime] = useState('18:00');
   const [images, setImages] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [fairAlert, setFairAlert] = useState(false);
   const [loading, setLoading] = useState(false);
 
   if (me.data && me.data.verificationLevel === 'PHONE') {
@@ -58,7 +60,10 @@ export default function CreatePost() {
       if (p == null) return toast.error('Enter a valid price in ₹');
       Object.assign(payload, { pricePaise: p, condition });
     }
-    if (type === 'ALERT') Object.assign(payload, { severity });
+    if (type === 'ALERT') {
+      if (!fairAlert) return toast.error('Please confirm the alert describes what happened, not who someone is');
+      Object.assign(payload, { severity });
+    }
     if (type === 'HOBBY') {
       if (hobbyTag.trim().length < 2) return toast.error('Which hobby? e.g. badminton');
       payload.hobbyTag = hobbyTag.trim().toLowerCase().replace(/^#/, '');
@@ -88,7 +93,7 @@ export default function CreatePost() {
       <View className="flex-row items-center border-b border-ink-100 px-2 py-1">
         <IconButton testID="close-composer" label="Close" name="close" onPress={() => router.back()} />
         <Text className="ml-1 flex-1 text-lg font-bold text-ink-900">New post</Text>
-        <Button testID="submit-post" title="Post" size="sm" loading={loading} onPress={submit} className="mr-2 px-5" />
+        <Button testID="submit-post" title={uploading ? 'Uploading…' : 'Post'} size="sm" loading={loading} disabled={uploading} onPress={submit} className="mr-2 px-5" />
       </View>
       <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 40 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
@@ -110,6 +115,14 @@ export default function CreatePost() {
               ))}
             </View>
             <Text className="mt-2 text-xs text-ink-500">Warnings & emergencies notify everyone within 2 km. For life-threatening emergencies, call 112 first.</Text>
+            <View className="mt-3 rounded-2xl bg-ink-50 p-3">
+              <Text className="text-xs font-bold text-ink-800">Describe what happened, not who someone is</Text>
+              <Text className="mt-1 text-xs leading-4 text-ink-600">Say what you saw (actions, vehicle, direction, time). Don't mention religion, caste, community or appearance unless it's a specific, identifying description that helps neighbours stay safe.</Text>
+              <Pressable testID="fair-alert" accessibilityRole="checkbox" accessibilityState={{ checked: fairAlert }} onPress={() => setFairAlert(!fairAlert)} className="mt-2 flex-row items-center">
+                <Icon name={fairAlert ? 'checkbox' : 'square-outline'} size={20} color="#0F766E" />
+                <Text className="ml-2 flex-1 text-xs font-semibold text-ink-800">My alert describes behaviour, not identity</Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
 
@@ -139,7 +152,7 @@ export default function CreatePost() {
         ) : null}
 
         <Field testID="post-body" label="Details" placeholder="What's happening in the mohalla?" multiline value={body} onChangeText={setBody} maxLength={3000} />
-        <ImagePickerRow value={images} onChange={setImages} />
+        <ImagePickerRow value={images} onChange={setImages} onBusyChange={setUploading} />
         <Text className="text-xs leading-4 text-ink-400">Visible to verified neighbours within ~5 km. Your exact address is never shown.</Text>
       </ScrollView>
     </KeyboardAvoidingView>

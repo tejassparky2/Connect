@@ -20,6 +20,8 @@ beforeEach(() => {
 test('phone screen validates Indian numbers and requests an OTP', async () => {
   const calls = mockFetch([{ method: 'POST', path: '/v1/auth/otp/request', body: { phone: '+919876543210', devCode: '123456' } }]);
   await render(withQuery(<PhoneScreen />).ui);
+  expect(screen.getByTestId('send-otp')).toBeDisabled(); // consent is required first
+  await fireEvent.press(screen.getByTestId('consent'));
   await fireEvent.changeText(screen.getByTestId('phone-input'), '12345 67890');
   await fireEvent.press(screen.getByTestId('send-otp'));
   expect(await screen.findByText('Enter a valid 10-digit mobile number')).toBeOnTheScreen();
@@ -27,17 +29,17 @@ test('phone screen validates Indian numbers and requests an OTP', async () => {
 
   await fireEvent.changeText(screen.getByTestId('phone-input'), '98765 43210');
   await fireEvent.press(screen.getByTestId('send-otp'));
-  await waitFor(() => expect(router.push).toHaveBeenCalledWith({ pathname: '/otp', params: { phone: '+919876543210', devCode: '123456' } }));
+  await waitFor(() => expect(router.push).toHaveBeenCalledWith({ pathname: '/otp', params: { phone: '+919876543210', devCode: '123456', consent: '1' } }));
   expect(calls[0].body).toEqual({ phone: '+919876543210' });
 });
 
 test('OTP screen auto-verifies on the 6th digit and persists tokens in SecureStore', async () => {
-  (useLocalSearchParams as jest.Mock).mockReturnValue({ phone: '+919876543210', devCode: '' });
+  (useLocalSearchParams as jest.Mock).mockReturnValue({ phone: '+919876543210', devCode: '', consent: '1' });
   const calls = mockFetch([{ method: 'POST', path: '/v1/auth/otp/verify', body: { accessToken: 'acc', refreshToken: 'ref', user: ME } }]);
   await render(withQuery(<OtpScreen />).ui);
   await fireEvent.changeText(screen.getByTestId('otp-input'), '12a3456'); // non-digits stripped
   await waitFor(() => expect(useAuth.getState().status).toBe('signedIn'));
-  expect(calls[0].body).toEqual({ phone: '+919876543210', code: '123456' });
+  expect(calls[0].body).toEqual({ phone: '+919876543210', code: '123456', consent: true });
   expect(await SecureStore.getItemAsync('mc.refresh')).toBe('ref');
   expect(useAuth.getState().me?.name).toBe('Asha');
 });
@@ -84,6 +86,11 @@ test('composer builds the right payload for a marketplace listing and an emergen
 
   await fireEvent.press(screen.getByTestId('type-ALERT'));
   await fireEvent.press(screen.getByTestId('sev-CRITICAL'));
+  await fireEvent.changeText(screen.getByTestId('post-title'), 'Gas leak smell');
+  await fireEvent.changeText(screen.getByTestId('post-body'), 'Near Tower B basement, avoid lighters');
+  await fireEvent.press(screen.getByTestId('submit-post'));
+  expect(calls).toHaveLength(1); // blocked until the anti-profiling confirmation is ticked
+  await fireEvent.press(screen.getByTestId('fair-alert'));
   await fireEvent.changeText(screen.getByTestId('post-title'), 'Gas leak smell');
   await fireEvent.changeText(screen.getByTestId('post-body'), 'Near Tower B basement, avoid lighters');
   await fireEvent.press(screen.getByTestId('submit-post'));

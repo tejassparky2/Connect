@@ -81,6 +81,7 @@ describe('Expo push', () => {
     const { locationVerified, offset, HSR, drainJobs } = await import('./helpers');
     const reporter = await locationVerified('Reporter');
     const near = await locationVerified('Near', offset(HSR, 300, 0));
+    await drainJobs(); // flush the async "Location verified" notification before the device registers
     await prisma.pushToken.create({ data: { userId: near.id, token: 'ExponentPushToken[near]', platform: 'ios' } });
     mockExpo((_u, body) => Response.json({ data: (body as unknown[]).map(() => ({ status: 'ok', id: 'a' })) }));
     await reporter.post('/v1/posts', { type: 'ALERT', title: 'Fire in Tower B', body: 'Smoke on 7th floor, evacuate', severity: 'CRITICAL' });

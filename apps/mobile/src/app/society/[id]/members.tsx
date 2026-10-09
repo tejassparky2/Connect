@@ -61,7 +61,7 @@ export default function Members() {
               <Avatar name={m.user.name} size={44} />
               <View className="ml-3 flex-1">
                 <View className="flex-row items-center">
-                  <Text className="mr-1 text-base font-semibold text-ink-900">{m.user.name}</Text>
+                  <Text numberOfLines={1} className="mr-1 flex-shrink text-base font-semibold text-ink-900">{m.user.name}</Text>
                   <LevelBadge level={m.user.verificationLevel} compact />
                 </View>
                 <Text className="text-xs text-ink-500">{m.tower ? `${m.tower}-` : ''}{m.unit} · {humanize(m.occupancy)}{tab === 'PENDING' ? ` · ${timeAgo(m.requestedAt)}` : ''}</Text>

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { api } from '@/lib/api';
@@ -9,14 +9,18 @@ import { Icon, Img } from '@/components/ui';
 
 const seen = new Set<string>();
 
-export function AdCard({ ad }: { ad: Ad }) {
-  useEffect(() => {
-    // One impression per app session; the server also de-duplicates per day.
-    if (seen.has(ad.id)) return;
-    seen.add(ad.id);
-    api.post(`/ads/${ad.id}/impression`).catch(() => undefined);
-  }, [ad.id]);
+/**
+ * Record an impression — call only when the ad was actually VIEWED (≥60% visible for 1 s,
+ * via FlatList viewability), never on mount: lists render rows far ahead of the viewport.
+ * One per app session; the server also de-duplicates per user per day.
+ */
+export function recordAdImpression(adId: string) {
+  if (seen.has(adId)) return;
+  seen.add(adId);
+  api.post(`/ads/${adId}/impression`).catch(() => undefined);
+}
 
+export function AdCard({ ad }: { ad: Ad }) {
   const act = () => {
     api.post(`/ads/${ad.id}/click`).catch(() => undefined);
     if (ad.cta === 'CALL') call(ad.business.phone);

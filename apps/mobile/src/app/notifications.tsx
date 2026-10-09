@@ -4,9 +4,10 @@ import { router } from 'expo-router';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { api, qs } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
+import { toast } from '@/lib/toast';
 import type { AppNotification } from '@/lib/types';
 import { Header } from '@/components/ui/Header';
-import { EmptyState, FeedSkeleton, Icon, type IconName } from '@/components/ui';
+import { EmptyState, FeedSkeleton, Icon, QueryError, type IconName } from '@/components/ui';
 
 const ICONS: Record<string, { icon: IconName; color: string; bg: string }> = {
   ALERT_NEARBY: { icon: 'warning', color: '#DC2626', bg: '#FEE2E2' },
@@ -46,9 +47,13 @@ export default function Notifications() {
   };
 
   const readAll = async () => {
-    await api.post('/notifications/read-all');
-    qc.invalidateQueries({ queryKey: ['badges'] });
-    q.refetch();
+    try {
+      await api.post('/notifications/read-all');
+      qc.invalidateQueries({ queryKey: ['badges'] });
+      q.refetch();
+    } catch (e) {
+      toast.error(e);
+    }
   };
 
   return (
@@ -56,12 +61,14 @@ export default function Notifications() {
       <Header title="Notifications" right={items.some((n) => !n.readAt) ? <Pressable testID="read-all" onPress={readAll} className="mr-3"><Text className="text-sm font-semibold text-brand-700">Mark all read</Text></Pressable> : null} />
       {q.isLoading ? (
         <FeedSkeleton />
+      ) : q.isError ? (
+        <QueryError error={q.error} onRetry={() => q.refetch()} />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(n) => n.id}
           refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}
-          onEndReached={() => q.hasNextPage && q.fetchNextPage()}
+          onEndReached={() => q.hasNextPage && !q.isFetchingNextPage && q.fetchNextPage()}
           ListEmptyComponent={<EmptyState emoji="🔔" title="You're all caught up" body="Alerts, replies and society updates will show up here." />}
           renderItem={({ item }) => {
             const m = ICONS[item.type] ?? ICONS.SYSTEM;

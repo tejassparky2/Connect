@@ -1,5 +1,6 @@
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs } from 'expo-router/js-tabs';
 import { router } from 'expo-router';
 import { Icon, type IconName } from '@/components/ui';
@@ -12,6 +13,7 @@ const tabIcon = (name: IconName, active: IconName) =>
 
 export default function TabsLayout() {
   const me = useMe();
+  const insets = useSafeAreaInsets();
   const pending = me.data?.societies.some((s) => s.status === 'PENDING');
   return (
     <Tabs
@@ -20,7 +22,9 @@ export default function TabsLayout() {
         tabBarActiveTintColor: '#0F766E',
         tabBarInactiveTintColor: '#94A3B8',
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600', lineHeight: 15 },
-        tabBarStyle: { borderTopColor: '#F1F5F9', height: Platform.OS === 'ios' ? 88 : 70, paddingTop: 6, paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
+        // Respect the real bottom inset (home indicator / Android gesture or 3-button nav bar).
+        tabBarStyle: { borderTopColor: '#F1F5F9', height: 58 + insets.bottom, paddingTop: 6, paddingBottom: Math.max(insets.bottom, 8) },
+        tabBarHideOnKeyboard: true,
         tabBarLabelPosition: 'below-icon',
       }}
     >

@@ -37,12 +37,13 @@ export default function SocietyHub() {
     }
   };
   const setAutoApprove = async (v: boolean) => {
+    qc.setQueryData<SocietySummary>(['society', id], (d) => (d ? { ...d, requireApproval: !v } : d)); // optimistic
     try {
       await api.patch(`/societies/${id}`, { requireApproval: !v });
-      q.refetch();
     } catch (e) {
       toast.error(e);
     }
+    q.refetch();
   };
   const leave = async () => {
     if (!(await confirm(`Leave ${s?.name}?`, 'You will lose access to notices and the helpdesk.', { confirmText: 'Leave', destructive: true }))) return;
@@ -50,6 +51,8 @@ export default function SocietyHub() {
       await api.del(`/societies/${id}/membership`);
       qc.invalidateQueries({ queryKey: ['my-societies'] });
       qc.invalidateQueries({ queryKey: ['me'] });
+      qc.invalidateQueries({ queryKey: ['society', id] });
+      qc.invalidateQueries({ queryKey: ['verification'] });
       router.back();
     } catch (e) {
       toast.error(e);
@@ -124,7 +127,7 @@ export default function SocietyHub() {
                     <Text className="font-semibold text-ink-800">Auto-approve with code</Text>
                     <Text className="text-xs text-ink-500">Location-verified residents with the code join instantly</Text>
                   </View>
-                  <Switch testID="auto-approve" value={!s.requireApproval} onValueChange={setAutoApprove} trackColor={{ true: '#0F766E' }} />
+                  <Switch accessibilityLabel="Auto-approve with invite code" testID="auto-approve" value={!s.requireApproval} onValueChange={setAutoApprove} trackColor={{ true: '#0F766E' }} />
                 </View>
               ) : null}
             </Card>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import { useMe } from '@/hooks/useMe';
 import { PostCard } from '@/components/PostCard';
 import { Header } from '@/components/ui/Header';
 import { confirm } from '@/components/ui/Overlays';
-import { Avatar, EmptyState, Icon, LevelBadge } from '@/components/ui';
+import { Avatar, EmptyState, Icon, LevelBadge, QueryError } from '@/components/ui';
 
 export default function PostDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,11 +57,13 @@ export default function PostDetail() {
       <Header title="Post" />
       {post.isLoading ? (
         <ActivityIndicator className="mt-10" color="#0F766E" />
+      ) : post.isError && (post.error as { status?: number }).status !== 404 ? (
+        <QueryError error={post.error} onRetry={() => post.refetch()} />
       ) : post.isError || !post.data ? (
         <EmptyState emoji="🫥" title="Post not available" body="It may have been removed or is outside your neighbourhood." />
       ) : (
         <>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={post.isRefetching || comments.isRefetching} onRefresh={() => { post.refetch(); comments.refetch(); }} />}>
             <PostCard post={post.data} detail onDeleted={() => router.back()} />
             <Text className="mb-2 mt-2 text-base font-bold text-ink-900">{post.data.commentCount ? `${post.data.commentCount} replies` : 'Replies'}</Text>
             {comments.data?.items.length === 0 ? <Text className="py-6 text-center text-sm text-ink-400">No replies yet. Start the conversation!</Text> : null}
@@ -76,7 +78,7 @@ export default function PostDetail() {
                   </View>
                   <Text className="mt-0.5 text-[15px] leading-5 text-ink-700">{c.body}</Text>
                   {c.isMine || post.data?.isMine ? (
-                    <Pressable onPress={() => remove(c)} className="mt-1 self-start">
+                    <Pressable accessibilityRole="button" accessibilityLabel="Delete comment" hitSlop={12} onPress={() => remove(c)} className="mt-1 self-start">
                       <Text className="text-xs font-semibold text-ink-400">Delete</Text>
                     </Pressable>
                   ) : null}

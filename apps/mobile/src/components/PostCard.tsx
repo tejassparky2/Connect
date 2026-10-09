@@ -16,12 +16,12 @@ export function PostCard({ post, detail = false, onDeleted }: { post: Post; deta
   return (
     <Card testID={`post-${post.id}`} className={`mb-3 ${critical ? 'border-2 border-alert-500' : ''}`} onPress={detail ? undefined : () => router.push(`/post/${post.id}`)}>
       <View className="flex-row items-center">
-        <Pressable onPress={() => router.push(`/user/${post.author.id}`)}>
+        <Pressable accessibilityLabel={`${post.author.name}'s profile`} onPress={() => router.push(`/user/${post.author.id}`)}>
           <Avatar name={post.author.name} uri={post.author.avatarUrl} size={40} />
         </Pressable>
         <View className="ml-3 flex-1">
           <View className="flex-row items-center">
-            <Text numberOfLines={1} className="mr-1 text-[15px] font-bold text-ink-900">
+            <Text numberOfLines={1} className="mr-1 flex-shrink text-[15px] font-bold text-ink-900">
               {post.author.name}
             </Text>
             <LevelBadge level={post.author.verificationLevel} compact />
@@ -80,11 +80,11 @@ export function PostCard({ post, detail = false, onDeleted }: { post: Post; deta
       ) : null}
 
       <View className="mt-3 flex-row items-center border-t border-ink-100 pt-3">
-        <Pressable testID={`like-${post.id}`} onPress={() => toggleLike(post)} hitSlop={6} className="mr-6 flex-row items-center">
+        <Pressable testID={`like-${post.id}`} accessibilityRole="button" accessibilityLabel={`${post.likedByMe ? 'Remove thanks' : 'Thank'}, ${post.likeCount} thanks`} accessibilityState={{ selected: post.likedByMe }} onPress={() => toggleLike(post)} hitSlop={8} className="mr-6 flex-row items-center">
           <Icon name={post.likedByMe ? 'heart' : 'heart-outline'} size={20} color={post.likedByMe ? '#E11D48' : '#64748B'} />
           <Text className={`ml-1.5 text-sm font-semibold ${post.likedByMe ? 'text-rose-600' : 'text-ink-500'}`}>{post.likeCount || 'Thank'}</Text>
         </Pressable>
-        <Pressable onPress={() => router.push(`/post/${post.id}`)} hitSlop={6} className="mr-6 flex-row items-center">
+        <Pressable accessibilityRole="button" accessibilityLabel={`${post.commentCount} replies`} onPress={() => router.push(`/post/${post.id}`)} hitSlop={8} className="mr-6 flex-row items-center">
           <Icon name="chatbubble-outline" size={19} color="#64748B" />
           <Text className="ml-1.5 text-sm font-semibold text-ink-500">{post.commentCount || 'Reply'}</Text>
         </Pressable>

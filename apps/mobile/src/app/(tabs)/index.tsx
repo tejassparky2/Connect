@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, View, type ViewToken } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import { FEED_FILTERS } from '@/lib/constants';
 import { formatDistance } from '@/lib/format';
 import type { Ad, FeedPage, Post, PostType } from '@/lib/types';
 import { useBadges, useMe } from '@/hooks/useMe';
-import { AdCard } from '@/components/AdCard';
+import { AdCard, recordAdImpression } from '@/components/AdCard';
 import { PostCard } from '@/components/PostCard';
 import { VerifyBanner } from '@/components/VerifyBanner';
 import { Chip, EmptyState, FeedSkeleton, Icon, IconButton } from '@/components/ui';
@@ -36,17 +36,26 @@ export default function Home() {
   const first = feed.data?.pages[0];
   const rows = useMemo<Row[]>(() => {
     const pinned = new Set(first?.pinnedAlerts.map((p) => p.id) ?? []);
+    const seenIds = new Set<string>();
+    const ad = first?.sponsored[0];
     const out: Row[] = [];
-    feed.data?.pages.forEach((pg, pi) => {
-      pg.items.forEach((post, i) => {
-        if (pi === 0 && pinned.has(post.id)) return; // already shown pinned on top
+    feed.data?.pages.forEach((pg) =>
+      pg.items.forEach((post) => {
+        if (pinned.has(post.id) || seenIds.has(post.id)) return; // pinned alerts are shown on top
+        seenIds.add(post.id);
         out.push({ kind: 'post', post });
-        if (i === 2 && pg.sponsored[0]) out.push({ kind: 'ad', ad: pg.sponsored[0] });
-      });
-      if (pg.items.length <= 2 && pg.sponsored[0] && pi === 0) out.push({ kind: 'ad', ad: pg.sponsored[0] });
-    });
+        if (ad && out.length === 3) out.push({ kind: 'ad', ad }); // single sponsored slot
+      }),
+    );
+    if (ad && out.length < 3) out.push({ kind: 'ad', ad });
     return out;
   }, [feed.data, first]);
+
+  // Bill impressions only for ads that were actually seen.
+  const viewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 1000 }).current;
+  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken<Row>[] }) => {
+    viewableItems.forEach((v) => v.item?.kind === 'ad' && recordAdImpression(v.item.ad.id));
+  }).current;
 
   const hoodName = stats.data?.neighborhood?.name ?? me.data?.address?.locality ?? 'Your neighbourhood';
 
@@ -123,6 +132,8 @@ export default function Home() {
           testID="feed-list"
           data={rows}
           keyExtractor={(r) => (r.kind === 'post' ? r.post.id : `ad-${r.ad.id}`)}
+          viewabilityConfig={viewability}
+          onViewableItemsChanged={onViewable}
           renderItem={({ item }) => (item.kind === 'post' ? <PostCard post={item.post} /> : <AdCard ad={item.ad} />)}
           ListHeaderComponent={header}
           ListEmptyComponent={

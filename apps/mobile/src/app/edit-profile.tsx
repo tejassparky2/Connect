@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,6 +18,16 @@ export default function EditProfile() {
   const [avatarUrl, setAvatar] = useState(me.data?.avatarUrl ?? null);
   const [radius, setRadius] = useState(me.data?.feedRadiusM ?? 3000);
   const [busy, setBusy] = useState(false);
+  const [seeded, setSeeded] = useState(!!me.data);
+  // If the profile wasn't loaded on mount, seed the form once it arrives (don't overwrite real values).
+  useEffect(() => {
+    if (seeded || !me.data) return;
+    setName(me.data.name ?? '');
+    setBio(me.data.bio ?? '');
+    setAvatar(me.data.avatarUrl ?? null);
+    setRadius(me.data.feedRadiusM);
+    setSeeded(true);
+  }, [me.data, seeded]);
 
   const pick = async () => {
     const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.6 });
@@ -57,7 +67,7 @@ export default function EditProfile() {
         <Text className="mb-2 text-sm font-semibold text-ink-700">Neighbourhood feed radius</Text>
         <View className="mb-1 flex-row">{[2000, 3000, 4000, 5000].map((r) => <Chip key={r} testID={`feedradius-${r}`} label={`${r / 1000} km`} selected={radius === r} onPress={() => setRadius(r)} />)}</View>
         <Text className="mb-6 text-xs text-ink-500">See posts, alerts and ads from neighbours within this distance of your home.</Text>
-        <Button testID="save-profile" title="Save" size="lg" loading={busy} disabled={name.trim().length < 2} onPress={save} />
+        <Button testID="save-profile" title="Save" size="lg" loading={busy} disabled={!seeded || name.trim().length < 2} onPress={save} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

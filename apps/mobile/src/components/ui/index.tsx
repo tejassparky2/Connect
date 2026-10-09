@@ -263,12 +263,19 @@ export function Row({ icon, label, value, onPress, danger, testID }: { icon: Ico
 
 export function Segmented<T extends string>({ options, value, onChange }: { options: { key: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <View className="flex-row rounded-2xl bg-ink-100 p-1">
+    <View accessibilityRole="tablist" className="flex-row rounded-2xl bg-ink-100 p-1">
       {options.map((o) => (
-        <Pressable key={o.key} testID={`seg-${o.key}`} onPress={() => onChange(o.key)} className={`flex-1 items-center rounded-xl py-2 ${value === o.key ? 'bg-white' : ''}`}>
+        <Pressable key={o.key} testID={`seg-${o.key}`} accessibilityRole="tab" accessibilityState={{ selected: value === o.key }} onPress={() => onChange(o.key)} className={`flex-1 items-center rounded-xl py-2 ${value === o.key ? 'bg-white' : ''}`}>
           <Text className={`text-sm font-semibold ${value === o.key ? 'text-ink-900' : 'text-ink-500'}`}>{o.label}</Text>
         </Pressable>
       ))}
     </View>
   );
+}
+
+/** Error state for a failed query: shows the real reason + Retry (instead of a misleading empty state). */
+export function QueryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const e = error as { code?: string; message?: string } | null;
+  const offline = e?.code === 'NETWORK';
+  return <EmptyState emoji={offline ? '📡' : '⚠️'} title={offline ? "You're offline" : "Couldn't load this"} body={e?.message} action="Try again" onAction={onRetry} />;
 }

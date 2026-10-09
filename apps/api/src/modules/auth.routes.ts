@@ -3,17 +3,20 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { normalizeIndianPhone } from '../lib/phone';
-import { badRequest } from '../lib/errors';
+import { AppError, badRequest } from '../lib/errors';
+
+/** Bump when the privacy notice changes materially (users re-consent). */
+export const PRIVACY_NOTICE_VERSION = '2026-10';
 import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken, signAccessToken } from '../lib/tokens';
 import { otpProvider } from '../services/otp';
 import { validate } from '../middleware/validate';
-import { isTest } from '../config/env';
+import { env, isTest } from '../config/env';
 import { serializeMe } from './me.routes';
 
 export const authRouter = Router();
 
 // Per-IP limits stop SMS-pumping from a single source; per-phone limits live in the OTP service.
-const otpLimiter = rateLimit({ windowMs: 15 * 60_000, limit: isTest ? 1000 : 10, standardHeaders: 'draft-7', legacyHeaders: false });
+const otpLimiter = rateLimit({ windowMs: 15 * 60_000, limit: isTest ? 1000 : env.OTP_IP_LIMIT_PER_15MIN, standardHeaders: 'draft-7', legacyHeaders: false });
 const verifyLimiter = rateLimit({ windowMs: 15 * 60_000, limit: isTest ? 1000 : 30, standardHeaders: 'draft-7', legacyHeaders: false });
 
 const phoneSchema = z.object({ phone: z.string().min(10).max(20) });
@@ -33,15 +36,26 @@ authRouter.post('/otp/request', otpLimiter, validate('body', phoneSchema), async
 authRouter.post(
   '/otp/verify',
   verifyLimiter,
-  validate('body', z.object({ phone: z.string().min(10).max(20), code: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits') })),
+  validate(
+    'body',
+    z.object({
+      phone: z.string().min(10).max(20),
+      code: z.string().regex(/^\d{6}$/, 'OTP must be 6 digits'),
+      /** Required for NEW accounts: affirmative acceptance of the privacy notice (DPDP Act 2023). */
+      consent: z.boolean().optional(),
+    }),
+  ),
   async (req, res) => {
     const phone = parsePhone(req.body.phone);
+    // Check consent BEFORE consuming the OTP, so a missing tick doesn't burn the user's code.
+    let user = await prisma.user.findUnique({ where: { phone } });
+    if (!user && req.body.consent !== true) throw new AppError(400, 'CONSENT_REQUIRED', 'Please accept the privacy notice to create your account');
     const { providerUserId } = await otpProvider.verify(phone, req.body.code, req.ip);
 
-    let user = await prisma.user.findUnique({ where: { phone } });
+    user ??= await prisma.user.findUnique({ where: { phone } });
     const isNewUser = !user;
     if (!user) {
-      user = await prisma.user.create({ data: { phone, authProviderId: providerUserId } });
+      user = await prisma.user.create({ data: { phone, authProviderId: providerUserId, consentAt: new Date(), consentVersion: PRIVACY_NOTICE_VERSION } });
     } else if (providerUserId && !user.authProviderId) {
       user = await prisma.user.update({ where: { id: user.id }, data: { authProviderId: providerUserId } });
     }

@@ -85,7 +85,7 @@ postsRouter.get('/feed', validate('query', feedQuery), async (req, res) => {
   const [items, alerts, sponsored] = await Promise.all([
     hydrate(page, user.id),
     !cursor && !query.type ? queryActiveAlertIds(home, radiusM, user.id).then((a) => hydrate(a, user.id)) : Promise.resolve([]),
-    serveAdsFor(home, 1),
+    !cursor ? serveAdsFor(home, 1) : Promise.resolve([]), // one sponsored slot per scroll session
   ]);
 
   res.json({

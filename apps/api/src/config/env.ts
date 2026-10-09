@@ -49,6 +49,8 @@ const schema = z.object({
   TRUST_PROXY: z.string().default('0'),
   /** Global per-IP request budget per minute. */
   RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(300),
+  /** OTP send requests per IP per 15 minutes (per-phone limits apply separately). */
+  OTP_IP_LIMIT_PER_15MIN: z.coerce.number().int().positive().default(10),
 });
 
 const parsed = schema.safeParse(process.env);

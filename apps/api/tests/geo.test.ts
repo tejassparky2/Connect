@@ -84,7 +84,7 @@ describe('PostGIS: nearby-user queries at scale', () => {
   });
 
   it('exact-distance ties larger than the buffer still paginate correctly (fallback path)', async () => {
-    const spot = offset(HSR, 3000, 3000); // outside the bulk disc
+    const spot = offset(HSR, 20000, 0); // far from the bulk disc AND the 2–6 km decoy ring
     await prisma.$executeRaw`
       INSERT INTO users (id, phone, "verificationLevel", "homeLocation", "updatedAt")
       SELECT gen_random_uuid(), '+9150' || lpad(g::text, 8, '0'), 'LOCATION',

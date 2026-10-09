@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatRupees, humanize, timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
@@ -24,6 +24,7 @@ const STATUS_TONE: Record<Campaign['status'], 'brand' | 'saffron' | 'neutral' | 
 
 export default function ManageBusiness() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const qc = useQueryClient();
   const biz = useQuery({ queryKey: ['business', id], queryFn: () => api.get<Business>(`/businesses/${id}`) });
   const wallet = useQuery({ queryKey: ['wallet', id], queryFn: () => api.get<Wallet>(`/businesses/${id}/wallet`) });
   const campaigns = useQuery({ queryKey: ['campaigns', id], queryFn: () => api.get<{ items: Campaign[] }>(`/ads/campaigns?businessId=${id}`) });
@@ -41,8 +42,18 @@ export default function ManageBusiness() {
         toast.success(`${formatRupees(amount)} added (test mode)`);
       } else if (order.checkoutUrl) {
         // Razorpay Checkout (UPI / cards / netbanking) in a secure browser session.
+        const before = wallet.data?.balancePaise ?? 0;
         await WebBrowser.openAuthSessionAsync(order.checkoutUrl, 'mohalla://wallet');
         toast.info('Checking payment status…');
+        // The webhook may land a few seconds after the browser closes: poll briefly.
+        for (let i = 0; i < 5; i++) {
+          const w = await wallet.refetch();
+          if ((w.data?.balancePaise ?? 0) > before) {
+            toast.success('Money added to your wallet');
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+        }
       }
       await wallet.refetch();
     } catch (e) {
@@ -59,6 +70,8 @@ export default function ManageBusiness() {
       await api.post(`/businesses/${id}/announcements`, { title: offer.title.trim(), body: offer.body.trim(), validUntil: new Date(Date.now() + 7 * 86400_000).toISOString() });
       setOffer({ title: '', body: '' });
       toast.success('Offer published to nearby neighbours');
+      qc.invalidateQueries({ queryKey: ['business', id] });
+      qc.invalidateQueries({ queryKey: ['offers'] });
     } catch (e) {
       toast.error(e);
     } finally {

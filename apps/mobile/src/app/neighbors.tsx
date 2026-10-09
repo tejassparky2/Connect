@@ -6,7 +6,7 @@ import { api, ApiError, qs } from '@/lib/api';
 import { formatDistance } from '@/lib/format';
 import type { Level } from '@/lib/types';
 import { Header } from '@/components/ui/Header';
-import { Avatar, EmptyState, FeedSkeleton, Icon, LevelBadge } from '@/components/ui';
+import { Avatar, EmptyState, FeedSkeleton, Icon, LevelBadge, QueryError } from '@/components/ui';
 
 interface N { id: string; name: string | null; avatarUrl: string | null; verificationLevel: Level; neighborhoodName: string | null; distanceM: number }
 
@@ -25,11 +25,13 @@ export default function Neighbors() {
         <FeedSkeleton />
       ) : err?.code === 'VERIFICATION_REQUIRED' ? (
         <EmptyState emoji="📍" title="Verify to see neighbours" body="The neighbour directory is only visible to verified residents." action="Verify now" onAction={() => router.replace('/verify')} />
+      ) : q.isError ? (
+        <QueryError error={q.error} onRetry={() => q.refetch()} />
       ) : (
         <FlatList
           data={q.data?.pages.flatMap((p) => p.items) ?? []}
           keyExtractor={(n) => n.id}
-          onEndReached={() => q.hasNextPage && q.fetchNextPage()}
+          onEndReached={() => q.hasNextPage && !q.isFetchingNextPage && q.fetchNextPage()}
           ListEmptyComponent={<EmptyState emoji="🌱" title="No verified neighbours yet" body="Invite people on your street to join Mohalla Connect." />}
           renderItem={({ item }) => (
             <Pressable onPress={() => router.push(`/user/${item.id}`)} className="flex-row items-center border-b border-ink-100 px-4 py-3 active:bg-ink-50">

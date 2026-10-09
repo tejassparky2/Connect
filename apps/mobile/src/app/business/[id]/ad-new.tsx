@@ -30,6 +30,7 @@ export default function AdBuilder() {
   const [budget, setBudget] = useState(50000);
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null); // created draft, reused on retry
   const estimate = useQuery({ queryKey: ['ad-estimate', id, radiusM], queryFn: () => api.get<{ verifiedHouseholds: number }>(`/ads/estimate?businessId=${id}&radiusM=${radiusM}`) });
 
   const impressions = Math.floor((budget / CPM) * 1000);
@@ -38,7 +39,7 @@ export default function AdBuilder() {
     if (body.trim().length < 10) return toast.error('Description needs at least 10 characters');
     setBusy(true);
     try {
-      const c = await api.post<Campaign>('/ads/campaigns', {
+      const c = draftId ? { id: draftId } : await api.post<Campaign>('/ads/campaigns', {
         businessId: id,
         headline: headline.trim(),
         body: body.trim(),
@@ -49,6 +50,8 @@ export default function AdBuilder() {
         imageUrl: biz.data?.photos[0],
         endAt: new Date(Date.now() + days * 86400_000).toISOString(),
       });
+      setDraftId(c.id);
+      qc.invalidateQueries({ queryKey: ['campaigns', id] });
       if (launch) {
         const r = await api.post<Campaign>(`/ads/campaigns/${c.id}/launch`);
         toast.success(r.status === 'ACTIVE' ? 'Your ad is live! 🚀' : 'Submitted for review');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -32,6 +32,7 @@ export default function TicketDetail() {
     try {
       await api.post(`/societies/${id}/tickets/${tid}/comments`, { body });
       q.refetch();
+      qc.invalidateQueries({ queryKey: ['tickets', id] });
     } catch (e) {
       toast.error(e);
       throw e;
@@ -43,7 +44,7 @@ export default function TicketDetail() {
       <Header title="Complaint" />
       {q.isLoading ? <ActivityIndicator className="mt-10" color="#0F766E" /> : !t ? <EmptyState emoji="🫥" title="Not found" /> : (
         <>
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }} refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}>
             <Card>
               <View className="flex-row items-center">
                 <Text className="text-2xl">{CAT_EMOJI[t.category]}</Text>

@@ -19,6 +19,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { PrismaClient } from '@prisma/client';
 
 const GOTRUE = process.env.GOTRUE_URL ?? 'http://localhost:9999';
 const GW_PORT = 9998;
@@ -30,6 +31,11 @@ let gw;
 let api;
 
 before(async () => {
+  // Re-runnable: clear this test's cooldown state (the GoTrue test numbers are fixed).
+  const db = new PrismaClient();
+  await db.otpChallenge.deleteMany({ where: { phone: { in: ['+919900012345', '+919900054321'] } } });
+  await db.$disconnect();
+
   gw = http.createServer(async (req, res) => {
     if (!req.url.startsWith('/auth/v1/')) return res.writeHead(404).end();
     if (req.headers.apikey !== KEY) return res.writeHead(401, { 'content-type': 'application/json' }).end('{"message":"Invalid API key"}');
@@ -79,7 +85,7 @@ test('wrong OTP → 401 from our API (GoTrue says 403 otp_expired)', async () =>
 });
 
 test('correct OTP → our own session; user linked to the Supabase user id; phone normalised to E.164', async () => {
-  const r = await post('/auth/otp/verify', { phone: '+91 99000 12345', code: '123456' });
+  const r = await post('/auth/otp/verify', { phone: '+91 99000 12345', code: '123456', consent: true });
   const body = await r.json();
   assert.equal(r.status, 200, JSON.stringify(body));
   assert.ok(body.accessToken && body.refreshToken);

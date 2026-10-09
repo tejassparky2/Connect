@@ -17,7 +17,7 @@ if [ "${SKIP_WEB_BUILD:-0}" != "1" ]; then
 fi
 
 cd "$ROOT/apps/api"
-NODE_ENV=development PORT=$API_PORT DATABASE_URL="$DB_URL" OTP_PROVIDER=dev LOG_LEVEL=warn \
+NODE_ENV=development OTP_IP_LIMIT_PER_15MIN=1000 PORT=$API_PORT DATABASE_URL="$DB_URL" OTP_PROVIDER=dev LOG_LEVEL=warn \
   GPS_CHECKS_REQUIRED=2 GPS_CHECK_MIN_GAP_HOURS=0 PUBLIC_BASE_URL="http://localhost:$API_PORT" UPLOAD_DIR=/tmp/mohalla-e2e-uploads \
   npx tsx src/server.ts > /tmp/mohalla-e2e-api.log 2>&1 &
 echo $! > /tmp/mohalla-e2e-api.pid

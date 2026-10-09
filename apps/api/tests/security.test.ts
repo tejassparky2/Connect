@@ -234,10 +234,10 @@ describe('M7/M8/L1/L2/L4/L6/L7/L8 and moderation edges', () => {
     const phone = nextPhone();
     const { body } = await request(app).post('/v1/auth/otp/request').send({ phone });
     const wrong = body.devCode === '000000' ? '111111' : '000000';
-    await Promise.all(Array.from({ length: 40 }, () => request(app).post('/v1/auth/otp/verify').send({ phone, code: wrong })));
+    await Promise.all(Array.from({ length: 40 }, () => request(app).post('/v1/auth/otp/verify').send({ phone, code: wrong, consent: true })));
     const ch = await prisma.otpChallenge.findFirstOrThrow({ where: { phone } });
     expect(ch.attempts).toBe(5);
-    expect((await request(app).post('/v1/auth/otp/verify').send({ phone, code: body.devCode })).status).toBe(429);
+    expect((await request(app).post('/v1/auth/otp/verify').send({ phone, code: body.devCode, consent: true })).status).toBe(429);
   });
 
   it('L7: javascript:/http image URLs are rejected', async () => {

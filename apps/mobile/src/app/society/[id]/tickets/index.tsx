@@ -6,7 +6,7 @@ import { api, qs } from '@/lib/api';
 import { humanize, timeAgo } from '@/lib/format';
 import type { Ticket } from '@/lib/types';
 import { Header } from '@/components/ui/Header';
-import { Button, Card, Chip, EmptyState, FeedSkeleton, Icon } from '@/components/ui';
+import { Button, Card, Chip, EmptyState, FeedSkeleton, Icon, QueryError } from '@/components/ui';
 import { CAT_EMOJI, STATUS_STYLE } from '@/components/ticketMeta';
 
 
@@ -25,7 +25,7 @@ export default function Tickets() {
           {(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const).map((s) => <Chip key={s} label={humanize(s)} selected={status === s} onPress={() => setStatus(status === s ? undefined : s)} />)}
         </ScrollView>
       </View>
-      {q.isLoading ? <FeedSkeleton /> : (
+      {q.isLoading ? <FeedSkeleton /> : q.isError ? <QueryError error={q.error} onRetry={() => q.refetch()} /> : (
         <FlatList
           data={q.data?.items ?? []}
           keyExtractor={(t) => t.id}

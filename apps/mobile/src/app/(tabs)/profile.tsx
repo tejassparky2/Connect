@@ -2,34 +2,33 @@ import React from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { categoryMeta } from '@/lib/constants';
 import { formatDistance, prettyPhone } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import { useMe } from '@/hooks/useMe';
+import { unregisterPush } from '@/hooks/usePush';
 import { confirm } from '@/components/ui/Overlays';
 import { Avatar, Card, Icon, LevelBadge, Row, SectionTitle } from '@/components/ui';
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
-  const qc = useQueryClient();
   const me = useMe();
   const { refreshToken, signOut } = useAuth();
   const u = me.data;
 
   const logout = async () => {
     if (!(await confirm('Log out?', undefined, { confirmText: 'Log out' }))) return;
+    await unregisterPush(); // stop this device receiving the account's notifications
     if (refreshToken) await api.post('/auth/logout', { refreshToken }).catch(() => undefined);
-    qc.clear();
-    await signOut();
+    await signOut(); // also clears every cached query
   };
   const deleteAccount = async () => {
     if (!(await confirm('Delete your account?', 'Your profile, address and memberships will be permanently erased (DPDP Act). This cannot be undone.', { confirmText: 'Delete forever', destructive: true }))) return;
     try {
+      await unregisterPush();
       await api.del('/me');
-      qc.clear();
       await signOut();
       toast.success('Your account has been deleted');
     } catch (e) {
@@ -42,7 +41,7 @@ export default function Profile() {
   return (
     <ScrollView className="flex-1 bg-ink-50" contentContainerStyle={{ paddingTop: insets.top + 12, padding: 16, paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={me.isRefetching} onRefresh={() => me.refetch()} />}>
       <Card className="items-center py-6">
-        <Pressable onPress={() => router.push('/edit-profile')}>
+        <Pressable accessibilityLabel="Edit profile photo" onPress={() => router.push('/edit-profile')}>
           <Avatar name={u?.name} uri={u?.avatarUrl} size={84} />
           <View className="absolute bottom-0 right-0 h-7 w-7 items-center justify-center rounded-full bg-brand-700"><Icon name="pencil" size={14} color="#fff" /></View>
         </Pressable>
@@ -85,6 +84,7 @@ export default function Profile() {
       <SectionTitle title="Account" />
       <Card className="py-1">
         <Row icon="create" label="Edit profile" onPress={() => router.push('/edit-profile')} />
+        <Row icon="lock-closed" label="Privacy & your data" onPress={() => router.push('/privacy')} />
         <Row testID="logout" icon="log-out" label="Log out" onPress={logout} />
         <Row icon="trash" label="Delete account" danger onPress={deleteAccount} />
       </Card>

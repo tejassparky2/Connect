@@ -18,8 +18,16 @@ describe('OTP login', () => {
     const stored = await prisma.otpChallenge.findFirstOrThrow({ where: { phone } });
     expect(stored.codeHash).not.toContain(r1.body.devCode);
 
-    const r2 = await request(app).post('/v1/auth/otp/verify').send({ phone, code: r1.body.devCode });
+    // New accounts must affirmatively accept the privacy notice (DPDP Act 2023).
+    const noConsent = await request(app).post('/v1/auth/otp/verify').send({ phone, code: r1.body.devCode });
+    expect(noConsent.status).toBe(400);
+    expect(noConsent.body.error.code).toBe('CONSENT_REQUIRED');
+
+    const r2 = await request(app).post('/v1/auth/otp/verify').send({ phone, code: r1.body.devCode, consent: true });
     expect(r2.status).toBe(200);
+    const row = await prisma.user.findUniqueOrThrow({ where: { phone } });
+    expect(row.consentAt).not.toBeNull();
+    expect(row.consentVersion).toBe('2026-10');
     expect(r2.body.isNewUser).toBe(true);
     expect(r2.body.user.verificationLevel).toBe('PHONE');
     expect(r2.body.accessToken).toBeTruthy();
@@ -41,8 +49,8 @@ describe('OTP login', () => {
     const phone = nextPhone();
     const { body } = await request(app).post('/v1/auth/otp/request').send({ phone });
     const wrong = body.devCode === '000000' ? '111111' : '000000';
-    for (let i = 0; i < 5; i++) expect((await request(app).post('/v1/auth/otp/verify').send({ phone, code: wrong })).status).toBe(401);
-    const locked = await request(app).post('/v1/auth/otp/verify').send({ phone, code: body.devCode });
+    for (let i = 0; i < 5; i++) expect((await request(app).post('/v1/auth/otp/verify').send({ phone, code: wrong, consent: true })).status).toBe(401);
+    const locked = await request(app).post('/v1/auth/otp/verify').send({ phone, code: body.devCode, consent: true });
     expect(locked.status).toBe(429);
   });
 });

@@ -8,7 +8,7 @@ import { BUSINESS_CATEGORIES, categoryMeta, SKILLS } from '@/lib/constants';
 import { formatDistance } from '@/lib/format';
 import type { Announcement, Business, Provider } from '@/lib/types';
 import { BusinessCard, ProviderCard } from '@/components/Cards';
-import { Chip, EmptyState, FeedSkeleton, Icon, Segmented } from '@/components/ui';
+import { Chip, EmptyState, FeedSkeleton, Icon, QueryError, Segmented } from '@/components/ui';
 
 type Tab = 'shops' | 'services';
 
@@ -84,7 +84,7 @@ export default function Explore() {
         <View className="mt-3 flex-row items-center rounded-2xl bg-ink-100 px-3">
           <Icon name="search" size={18} color="#64748B" />
           <TextInput testID="local-search" value={search} onChangeText={setSearch} placeholder={tab === 'shops' ? 'Search cafés, salons, kirana…' : 'Search by name…'} placeholderTextColor="#94A3B8" className="h-11 flex-1 px-2 text-base text-ink-900" />
-          {search ? <Pressable onPress={() => setSearch('')}><Icon name="close-circle" size={18} color="#94A3B8" /></Pressable> : null}
+          {search ? <Pressable accessibilityLabel="Clear search" hitSlop={12} onPress={() => setSearch('')}><Icon name="close-circle" size={18} color="#94A3B8" /></Pressable> : null}
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3">
           <Chip label="All" selected={tab === 'shops' ? !category : !skill} onPress={() => (tab === 'shops' ? setCategory(undefined) : setSkill(undefined))} />
@@ -95,6 +95,8 @@ export default function Explore() {
       </View>
       {active.isLoading ? (
         <FeedSkeleton />
+      ) : active.isError ? (
+        <QueryError error={active.error} onRetry={() => active.refetch()} />
       ) : (
         <FlatList
           data={items}

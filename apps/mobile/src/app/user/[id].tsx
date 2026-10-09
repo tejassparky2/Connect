@@ -1,14 +1,14 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import type { Level } from '@/lib/types';
 import { useMe } from '@/hooks/useMe';
 import { Header } from '@/components/ui/Header';
 import { confirm } from '@/components/ui/Overlays';
-import { Avatar, Button, Card, EmptyState, LevelBadge } from '@/components/ui';
+import { Avatar, Button, Card, EmptyState, LevelBadge, QueryError } from '@/components/ui';
 
 interface Profile {
   id: string;
@@ -26,6 +26,7 @@ interface Profile {
 export default function UserProfile() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const me = useMe();
+  const qc = useQueryClient();
   const q = useQuery({ queryKey: ['user', id], queryFn: () => api.get<Profile>(`/users/${id}`) });
   const u = q.data;
   const isMe = me.data?.id === id;
@@ -48,6 +49,8 @@ export default function UserProfile() {
       else await api.post(`/users/${id}/block`);
       toast.success(u.isBlocked ? 'Unblocked' : 'Blocked');
       q.refetch();
+      qc.invalidateQueries({ queryKey: ['feed'] });
+      qc.invalidateQueries({ queryKey: ['conversations'] });
     } catch (e) {
       toast.error(e);
     }
@@ -59,9 +62,9 @@ export default function UserProfile() {
       {q.isLoading ? (
         <ActivityIndicator className="mt-10" color="#0F766E" />
       ) : !u ? (
-        <EmptyState emoji="🫥" title="Profile not found" />
+        q.isError && (q.error as { status?: number }).status !== 404 ? <QueryError error={q.error} onRetry={() => q.refetch()} /> : <EmptyState emoji="🫥" title="Profile not found" />
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16 }} refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}>
           <Card className="items-center py-6">
             <Avatar name={u.name} uri={u.avatarUrl} size={88} />
             <Text className="mt-3 text-2xl font-extrabold text-ink-900">{u.name}</Text>

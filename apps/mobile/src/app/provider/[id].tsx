@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -12,7 +12,7 @@ import { useMe } from '@/hooks/useMe';
 import { Header } from '@/components/ui/Header';
 import { Avatar, Button, Card, EmptyState, Field, Icon, Pill, SectionTitle, Stars } from '@/components/ui';
 
-type Detail = Provider & { vouchedByMe: boolean; vouches: { note: string | null; createdAt: string; user: PublicUser }[]; reviews: Review[]; myReview: Review | null };
+type Detail = Provider & { vouchedByMe: boolean; vouches: { note: string | null; createdAt: string; user: PublicUser }[]; reviews: Review[]; myReview: { rating: number; body: string | null } | null };
 
 export default function ProviderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -64,7 +64,7 @@ export default function ProviderDetail() {
   return (
     <View className="flex-1 bg-ink-50">
       <Header title={p.name} subtitle={p.skills.map(skillLabel).join(' · ')} />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}>
         <Card className="items-center py-6">
           <Avatar name={p.name} size={80} />
           <Text className="mt-3 text-2xl font-extrabold text-ink-900">{p.name}</Text>

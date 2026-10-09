@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as Location from 'expo-location';
 
 export interface Fix {
@@ -13,9 +13,16 @@ export class LocationError extends Error {}
 /** High-accuracy fix for verification. Throws a user-friendly LocationError. */
 export async function getFix(): Promise<Fix> {
   const perm = await Location.requestForegroundPermissionsAsync();
-  if (perm.status !== 'granted') throw new LocationError('Location permission is needed to verify your neighbourhood. Enable it in Settings.');
+  if (perm.status !== 'granted') {
+    if (!perm.canAskAgain && Platform.OS !== 'web') {
+      // Permanently denied: the OS won't show the prompt again — offer the Settings screen.
+      Linking.openSettings().catch(() => undefined);
+    }
+    throw new LocationError('Location permission is needed to verify your neighbourhood. Enable it in Settings.');
+  }
   try {
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    // maximumAge: 0 — on web expo-location otherwise accepts a cached fix of ANY age.
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, ...(Platform.OS === 'web' ? { maximumAge: 0 } : {}) } as Location.LocationOptions);
     return {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,

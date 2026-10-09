@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Switch, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -8,8 +8,8 @@ import { humanize, timeAgo } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import type { Notice, SocietySummary } from '@/lib/types';
 import { Header } from '@/components/ui/Header';
-import { confirm, openSheet } from '@/components/ui/Overlays';
-import { Button, Card, Chip, EmptyState, FeedSkeleton, Field, Icon, IconButton } from '@/components/ui';
+import { BottomSheet, confirm, openSheet } from '@/components/ui/Overlays';
+import { Button, Card, Chip, EmptyState, FeedSkeleton, Field, Icon, IconButton, QueryError } from '@/components/ui';
 
 const EMOJI: Record<string, string> = { GENERAL: '📢', MAINTENANCE: '🛠️', MEETING: '🗓️', EVENT: '🎉', WATER: '💧', ELECTRICITY: '⚡', SECURITY: '🛡️', PAYMENT: '💳' };
 
@@ -17,7 +17,8 @@ export default function Notices() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const society = useQuery({ queryKey: ['society', id], queryFn: () => api.get<SocietySummary>(`/societies/${id}`) });
   const q = useQuery({ queryKey: ['notices', id], queryFn: () => api.get<{ items: Notice[] }>(`/societies/${id}/notices`) });
-  const isStaff = society.data?.membership?.role !== 'RESIDENT';
+  const role = society.data?.membership?.role;
+  const isStaff = role === 'RWA_ADMIN' || role === 'RWA_COMMITTEE';
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ title: '', body: '', category: 'GENERAL', isPinned: false });
   const [busy, setBusy] = useState(false);
@@ -47,7 +48,7 @@ export default function Notices() {
   return (
     <View className="flex-1 bg-ink-50">
       <Header title="Notice board" subtitle={society.data?.name} right={isStaff ? <Button testID="new-notice" title="New" size="sm" icon="add" className="mr-2" onPress={() => setOpen(true)} /> : null} />
-      {q.isLoading ? <FeedSkeleton /> : (
+      {q.isLoading ? <FeedSkeleton /> : q.isError ? <QueryError error={q.error} onRetry={() => q.refetch()} /> : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}>
           {q.data?.items.length === 0 ? <EmptyState emoji="📭" title="No notices yet" body="RWA announcements will appear here." /> : null}
           {q.data?.items.map((n) => (
@@ -66,9 +67,7 @@ export default function Notices() {
           ))}
         </ScrollView>
       )}
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
-          <View className="max-h-[90%] rounded-t-3xl bg-white p-5 pb-10">
+      <BottomSheet visible={open} onClose={() => setOpen(false)}>
             <View className="mb-3 flex-row items-center">
               <Text className="flex-1 text-xl font-extrabold text-ink-900">New notice</Text>
               <IconButton label="Close" name="close" onPress={() => setOpen(false)} />
@@ -81,13 +80,11 @@ export default function Notices() {
               <Field testID="notice-body" label="Details" multiline value={f.body} onChangeText={(t) => setF((x) => ({ ...x, body: t }))} maxLength={5000} />
               <Pressable onPress={() => setF((x) => ({ ...x, isPinned: !x.isPinned }))} className="mb-4 flex-row items-center">
                 <Text className="flex-1 font-semibold text-ink-800">📌 Pin to top</Text>
-                <Switch value={f.isPinned} onValueChange={(v) => setF((x) => ({ ...x, isPinned: v }))} trackColor={{ true: '#0F766E' }} />
+                <Switch accessibilityLabel="Pin to top" value={f.isPinned} onValueChange={(v) => setF((x) => ({ ...x, isPinned: v }))} trackColor={{ true: '#0F766E' }} />
               </Pressable>
               <Button testID="publish-notice" title="Publish & notify residents" loading={busy} onPress={post} />
             </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }

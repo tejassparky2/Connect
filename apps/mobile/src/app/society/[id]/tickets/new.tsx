@@ -45,7 +45,7 @@ export default function NewTicket() {
         <View className="mb-4 flex-row flex-wrap">{TICKET_CATEGORIES.map((c) => <View key={c} className="mb-2"><Chip testID={`tcat-${c}`} label={`${CAT_EMOJI[c]} ${humanize(c)}`} selected={category === c} onPress={() => setCategory(c)} /></View>)}</View>
         <Field testID="ticket-title" label="Title" placeholder="e.g. Lift 2 in Tower A not working" value={title} onChangeText={setTitle} maxLength={120} />
         <Field testID="ticket-desc" label="Details" placeholder="When did it start? Which floor / flat?" multiline value={description} onChangeText={setDescription} maxLength={3000} />
-        <Pressable onPress={() => setPrivate(!isPrivate)} className="mb-5 flex-row items-start rounded-2xl bg-ink-50 p-3">
+        <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: isPrivate }} onPress={() => setPrivate(!isPrivate)} className="mb-5 flex-row items-start rounded-2xl bg-ink-50 p-3">
           <Icon name={isPrivate ? 'checkbox' : 'square-outline'} size={22} color="#0F766E" />
           <View className="ml-2 flex-1">
             <Text className="font-semibold text-ink-800">Private complaint</Text>

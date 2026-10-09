@@ -21,6 +21,7 @@ jest.mock('expo-location', () => ({
 
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
+  useLastNotificationResponse: jest.fn(() => null),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   getPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),
   requestPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),

@@ -83,7 +83,7 @@ export default function NewProvider() {
           <Field containerClassName="flex-1" label="Typical rate" placeholder="₹300/visit" value={f.rateNote} onChangeText={set('rateNote')} maxLength={60} />
         </View>
         <Field label="Why do you recommend them?" placeholder="Punctual, honest, works in our society for 3 years" multiline value={f.about} onChangeText={set('about')} maxLength={500} />
-        <Pressable testID="prov-consent" onPress={() => setConsent(!consent)} className="mb-5 flex-row items-start rounded-2xl bg-ink-50 p-3">
+        <Pressable testID="prov-consent" accessibilityRole="checkbox" accessibilityState={{ checked: consent }} onPress={() => setConsent(!consent)} className="mb-5 flex-row items-start rounded-2xl bg-ink-50 p-3">
           <Icon name={consent ? 'checkbox' : 'square-outline'} size={22} color="#0F766E" />
           <Text className="ml-2 flex-1 text-sm leading-5 text-ink-700">I have asked this worker and they agreed to have their name and number shared with neighbours.</Text>
         </Pressable>

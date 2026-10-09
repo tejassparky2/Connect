@@ -14,6 +14,8 @@ export function Composer({ onSend, placeholder = 'Message…', initial = '' }: {
     try {
       await onSend(t);
       setText('');
+    } catch {
+      // caller already showed the error; keep the text so the user can retry
     } finally {
       setBusy(false);
     }

@@ -19,6 +19,7 @@ export default function NewBusiness() {
   const [f, setF] = useState({ name: '', description: '', phone: me.data?.phone?.replace('+91', '') ?? '', whatsapp: '', addressLine: '', pincode: me.data?.address?.pincode ?? '', gstin: '' });
   const [category, setCategory] = useState('CAFE');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [fix, setFix] = useState<Fix | null>(null);
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -106,8 +107,8 @@ export default function NewBusiness() {
           <Button testID="biz-locate" title={fix ? 'Re-pin' : 'Use current location'} size="sm" variant="outline" loading={locating} onPress={locate} />
         </View>
         <Text className="mb-2 text-sm font-semibold text-ink-700">Photos</Text>
-        <ImagePickerRow value={photos} onChange={setPhotos} max={8} />
-        <Button testID="submit-business" title="Publish listing" size="lg" loading={busy} onPress={submit} />
+        <ImagePickerRow value={photos} onChange={setPhotos} max={8} onBusyChange={setUploading} />
+        <Button testID="submit-business" title={uploading ? 'Uploading photos…' : 'Publish listing'} size="lg" loading={busy} disabled={uploading} onPress={submit} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

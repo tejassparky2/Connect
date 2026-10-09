@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { humanize } from '@/lib/format';
 import type { SocietySummary } from '@/lib/types';
-import { Button, Card, FeedSkeleton, Icon, Pill } from '@/components/ui';
+import { Button, Card, FeedSkeleton, Icon, Pill, QueryError } from '@/components/ui';
 
 interface Mine {
   membershipId: string;
@@ -31,6 +31,8 @@ export default function SocietyTab() {
       </View>
       {q.isLoading ? (
         <FeedSkeleton />
+      ) : q.isError ? (
+        <QueryError error={q.error} onRetry={() => q.refetch()} />
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}>
           {items.map((m) => (

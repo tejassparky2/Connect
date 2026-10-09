@@ -33,6 +33,7 @@ export default function Thread() {
   const send = async (body: string) => {
     try {
       const m = await api.post<Message>(`/conversations/${id}/messages`, { body });
+      await qc.cancelQueries({ queryKey: ['messages', id] }); // an in-flight poll must not overwrite this
       qc.setQueryData<{ items: Message[] }>(['messages', id], (d) => ({ items: [m, ...(d?.items ?? [])] }));
     } catch (e) {
       toast.error(e);
@@ -46,7 +47,7 @@ export default function Thread() {
       <Header
         title={other?.name ?? 'Chat'}
         subtitle={other?.neighborhood ?? undefined}
-        right={other ? <Pressable onPress={() => router.push(`/user/${other.id}`)} className="mr-2"><Avatar name={other.name} uri={other.avatarUrl} size={34} /></Pressable> : null}
+        right={other ? <Pressable accessibilityLabel={`${other.name}'s profile`} onPress={() => router.push(`/user/${other.id}`)} className="mr-2"><Avatar name={other.name} uri={other.avatarUrl} size={34} /></Pressable> : null}
       />
       {conv.data?.post ? (
         <Pressable onPress={() => router.push(`/post/${conv.data!.post!.id}`)} className="flex-row items-center border-b border-ink-100 bg-white px-4 py-2.5">

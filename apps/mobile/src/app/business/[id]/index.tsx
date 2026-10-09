@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -11,9 +11,9 @@ import type { Announcement, Business, Review } from '@/lib/types';
 import { useMe } from '@/hooks/useMe';
 import { Header } from '@/components/ui/Header';
 import { openSheet } from '@/components/ui/Overlays';
-import { Avatar, Button, Card, EmptyState, Field, Icon, IconButton, Img, Pill, SectionTitle, Stars } from '@/components/ui';
+import { Avatar, Button, Card, EmptyState, Field, Icon, IconButton, Img, Pill, QueryError, SectionTitle, Stars } from '@/components/ui';
 
-type Detail = Business & { announcements: Announcement[]; reviews: Review[]; myReview: Review | null };
+type Detail = Business & { announcements: Announcement[]; reviews: Review[]; myReview: { rating: number; body: string | null } | null };
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 export default function BusinessDetail() {
@@ -62,14 +62,14 @@ export default function BusinessDetail() {
     ]);
 
   if (q.isLoading) return <View className="flex-1 bg-white"><Header title="" /><ActivityIndicator className="mt-10" color="#0F766E" /></View>;
-  if (!b) return <View className="flex-1 bg-white"><Header title="Business" /><EmptyState emoji="🏚️" title="Business not found" /></View>;
+  if (!b) return <View className="flex-1 bg-white"><Header title="Business" />{q.isError && (q.error as { status?: number }).status !== 404 ? <QueryError error={q.error} onRetry={() => q.refetch()} /> : <EmptyState emoji="🏚️" title="Business not found" />}</View>;
   const cat = categoryMeta(b.category);
   const today = DAYS[(new Date().getDay() + 6) % 7];
 
   return (
     <View className="flex-1 bg-ink-50">
       <Header title={b.name} subtitle={`${cat.emoji} ${cat.label}`} right={b.isMine ? <Button testID="manage-business" title="Manage" size="sm" variant="secondary" onPress={() => router.push(`/business/${id}/manage`)} className="mr-2" /> : <IconButton label="More" name="ellipsis-horizontal" onPress={report} />} />
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => q.refetch()} />}>
         {b.photos[0] ? <Img source={{ uri: b.photos[0] }} style={{ width: '100%', aspectRatio: 16 / 9 }} contentFit="cover" /> : <View className="h-36 items-center justify-center bg-saffron-50"><Text className="text-6xl">{cat.emoji}</Text></View>}
         <View className="px-4">
           <Card className="-mt-6">

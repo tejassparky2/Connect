@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/format';
 import type { Conversation } from '@/lib/types';
 import { Header } from '@/components/ui/Header';
-import { Avatar, EmptyState, FeedSkeleton } from '@/components/ui';
+import { Avatar, EmptyState, FeedSkeleton, QueryError } from '@/components/ui';
 
 export default function Inbox() {
   const q = useQuery({ queryKey: ['conversations'], queryFn: () => api.get<{ items: Conversation[] }>('/conversations'), refetchInterval: 15_000 });
@@ -15,6 +15,8 @@ export default function Inbox() {
       <Header title="Messages" />
       {q.isLoading ? (
         <FeedSkeleton />
+      ) : q.isError ? (
+        <QueryError error={q.error} onRetry={() => q.refetch()} />
       ) : (
         <FlatList
           data={q.data?.items ?? []}

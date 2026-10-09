@@ -11,7 +11,7 @@ import { onSignOut, useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { useMe } from '@/hooks/useMe';
-import { usePushRegistration } from '@/hooks/usePush';
+import { NotificationTapRouter, usePushRegistration } from '@/hooks/usePush';
 import { Button } from '@/components/ui';
 import { ConfirmHost, SheetHost, ToastHost } from '@/components/ui/Overlays';
 
@@ -43,7 +43,7 @@ function AuthGate() {
     SplashScreen.hideAsync().catch(() => undefined);
     const group = segments[0];
     if (status === 'signedOut') {
-      if (group !== '(auth)') router.replace('/welcome');
+      if (group !== '(auth)' && group !== 'privacy') router.replace('/welcome'); // privacy notice readable before sign-up
       return;
     }
     const profile = me.data;
@@ -87,6 +87,7 @@ export default function RootLayout() {
               <Stack.Screen name="post/create" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             </Stack>
             <AuthGate />
+            {Platform.OS !== 'web' ? <NotificationTapRouter /> : null}
             <BootError />
             {/* Order matters: later = on top. */}
             <SheetHost />

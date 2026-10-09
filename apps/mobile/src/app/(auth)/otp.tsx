@@ -12,7 +12,7 @@ import { Button, IconButton } from '@/components/ui';
 
 export default function OtpScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ phone: string; devCode?: string }>();
+  const params = useLocalSearchParams<{ phone: string; devCode?: string; consent?: string }>();
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState(params.devCode || '');
   const [loading, setLoading] = useState(false);
@@ -32,7 +32,7 @@ export default function OtpScreen() {
     inFlight.current = true;
     setLoading(true);
     try {
-      const r = await api.post<{ accessToken: string; refreshToken: string; user: Me }>('/auth/otp/verify', { phone: params.phone, code: value });
+      const r = await api.post<{ accessToken: string; refreshToken: string; user: Me }>('/auth/otp/verify', { phone: params.phone, code: value, consent: params.consent === '1' });
       qc.setQueryData(['me'], r.user);
       await signIn(r.accessToken, r.refreshToken, r.user);
       // AuthGate takes it from here (profile → address → home).
