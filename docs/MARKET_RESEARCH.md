@@ -1,6 +1,6 @@
 # Mohalla Connect: Market, User and Regulatory Research (India, October 2026)
 
-> **How to read this document.** It is a desk-research report compiled on 9 Oct 2026 from web search and page fetches. It has about 170 cited URLs, which were collected automatically and have **not** each been re-checked by a person; spot-check the ones you rely on. **Reddit could not be accessed** from the research environment (see the caveats below). Legal points are from secondary commentary, not legal advice.
+> **How to read this document.** It is a desk-research report compiled on 9 Oct 2026 from web search and page fetches. It has about 170 cited URLs, which were collected automatically; 83 of them were spot-checked in Oct 2026 (see Verification log at the end) — the rest have not been re-checked; spot-check the ones you rely on. **Reddit could not be accessed** from the research environment (see the caveats below). Legal points are from secondary commentary, not legal advice.
 >
 > **What this codebase already does with these findings:**
 > - **#1 Ads stay out of safety channels.** Ads never appear in alerts, notices or pushes, and the feed shows at most one ad.
@@ -106,7 +106,7 @@ Gate-approval alerts can't be muted, so ads delivered through the same channel a
 Use the Aadhaar QR offline check, DigiLocker, phone OTP plus RWA approval, and neighbour vouching.
 
 **Evidence: why not to collect Aadhaar**
-- Puttaswamy (2018) struck down the contractual-use part of Aadhaar Act s.57. "Private companies no longer have authority to demand a person's Aadhaar ID."
+- Puttaswamy (2018) struck down the contractual-use part of Aadhaar Act s.57. "private companies won't have the authority to demand one's Aadhaar ID"
   - https://inc42.com/?p=137226
   - https://vinodkothari.com/2018/10/the-supreme-court-aadhaar-verdict-major-blow-to-fintech-companies/
 - The Jan 2025 "Good Governance" amendment rules let private entities do online Aadhaar *authentication* only after central-government/UIDAI approval of a proposal. Critics say this "attempts to virtually re-legislate what was struck down."
@@ -115,11 +115,11 @@ Use the Aadhaar QR offline check, DigiLocker, phone OTP plus RWA approval, and n
 
 **Evidence: lawful alternatives**
 - *Offline* verification (Secure QR / Paperless e-KYC) is permitted for "Offline Verification Seeking Entities". It requires consent and purpose limitation, and a later amendment added a registration framework (Reg. 13A).
-  - https://www.uidai.gov.in/images/The_Aadhaar_Authentication_and_Offline_Verifications_Regulations_2021.pdf
+  - https://old.uidai.gov.in/images/The_Aadhaar_Authentication_and_Offline_Verifications_Regulations_2021-_Clean_copy-30122025.pdf
   - https://vinodkothari.com/2019/03/aadhaar-ordinance-paving-way-for-use-of-voluntary-aadhaar-by-private-companies/
   - https://www.indialaw.in/blog/regulatory/aadhar-offline-verification-amendments/pdf/
-- UIDAI's new Aadhaar app (reported live from 30 June 2026) supports OVSE QR scanning for "visitor management" and "gig worker verification". Holders can share only their name or photo. https://www.angelone.in/news/personal-finance/new-aadhaar-app-launched-check-7-big-features-every-user-should-know
-- DigiLocker "Requester" onboarding is open to Indian-registered private companies. The citizen consents to each share. There is no sandbox (testing happens in production).
+- UIDAI's new Aadhaar app (reported live from 30 June 2026) supports OVSE QR scanning for "visitor management" and "gig worker verification". Holders share only the required details via QR. https://www.angelone.in/news/personal-finance/new-aadhaar-app-launched-check-7-big-features-every-user-should-know
+- DigiLocker "Requester" onboarding is open to Indian-registered private companies with demonstrable experience providing online services to Indian citizens and a functional website; registration is via a DigiLocker account of authorised personnel. The citizen consents to each share. There is no sandbox (testing happens in production).
   - https://cf-media.api-setu.in/resources/Partners-SOP.pdf
   - https://cf-media.api-setu.in/resources/DigiLocker-Terms-of-User-Requester-june-2025.pdf
   - https://rc.sunbird.org/use/integrations/digilocker-integration
@@ -128,7 +128,7 @@ Use the Aadhaar QR offline check, DigiLocker, phone OTP plus RWA approval, and n
 - Nextdoor verifies addresses by postcard code, phone, credit-card billing address ($0.01 charge), SSN (historically), and invitations from verified neighbours.
   - https://albanyca.org/home/showpublisheddocument/18830/636301026146770000
   - https://www.yumacountysheriff.org/PDF/Nextdoor-presentation.pdf
-- Nextdoor reports more than 100 million "Verified Neighbors". https://s28.q4cdn.com/517578190/files/doc_financials/2025/q2/Nextdoor-Investor-Update-Q2-2025-FINAL.pdf
+- Nextdoor's app-store listing claims 100M+ verified neighbours (company marketing); its Q2 2025 investor update reports 22M weekly active users. https://s28.q4cdn.com/517578190/files/doc_financials/2025/q2/Nextdoor-Investor-Update-Q2-2025-FINAL.pdf
 
 **Product action: verification tiers**
 1. Phone OTP.
@@ -147,13 +147,13 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
   - The apps notify residents every time a domestic worker enters or leaves, "often without their consent or knowledge".
   - A worker who left early because of an injury got an angry call triggered by an exit alert with no context.
   - Workers on MyGate "cannot see their ratings nor rate the employers".
-  - ApnaComplex removed its rating feature, then brought it back "due to demand".
-  - 14 workers interviewed didn't understand the app's features. Workers have no app interface; guards log their attendance.
+  - ApnaComplex removed its rating feature, then brought it back because there was demand.
+  - Of the 14 workers interviewed, workers "did not even understand all the features". Workers have no app interface; guards log their attendance.
   - https://restofworld.org/2023/home-monitoring-mygate-digital-bias/
   - Also summarised by Business & Human Rights Resource Centre: https://www.business-humanrights.org/fr/dernières-actualités/india-housing-security-apps-facilitate-hyper-surveillance-of-domestic-workers/
 - Social sensitivity is high:
   - Urban Company renamed "Insta Maids" (₹49/hour intro) to "Insta Help" within days after backlash in March 2025. https://www.outlookbusiness.com/start-up/news/urban-company-renames-insta-maids-to-insta-help-after-backlash
-  - Urban Company workers protested ratings thresholds (4.8) and commissions of up to 35%. https://amp.kr-asia.com/home-services-marketplace-urban-company-faces-heat-from-women-workers-over-unfair-work-practices
+  - Urban Company workers protested commission hikes to "over 30%" (workers sought a 20% cap). https://amp.kr-asia.com/home-services-marketplace-urban-company-faces-heat-from-women-workers-over-unfair-work-practices
   - Societies segregating lifts or fining workers for using the main lift drew public backlash.
     - Hyderabad: https://www.shethepeople.tv/news/hyderabad-housing-society-faces-backlash-for-fining-service-workers-1711958
     - Mumbai: https://scroll.in/article/1084949/how-separate-lifts-in-mumbai-highrises-sustain-caste-prejudice-in-the-city
@@ -171,10 +171,9 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 ### 6. Use design friction against profiling, as Nextdoor did (Medium)
 
 **Evidence**
-- Nextdoor redesigned its crime and safety posting form to require descriptors beyond race (hair, top, bottom, shoes) and reported a 75% drop in "problematic posts". This is a company-reported number.
+- Nextdoor redesigned its crime and safety posting form to require descriptors beyond race (e.g. clothing, shoes, age, build). Nextdoor reported a 75% reduction in posts containing racial profiling in test markets (Aug 2016). This is a company-reported number.
   - https://www.geekwire.com/2016/qa-nextdoor-ceo-explains-social-network-cracking-racial-profiling/
-  - https://blog.nextdoor.com/2016/04/26/continued-improvements-to-how-our-members-post-about-crime-and-safety
-- Nextdoor's "Kindness Reminder": 1 in 5 users who saw the prompt edited their comment. https://www.inman.com/2019/09/20/nextdoor-tries-to-curb-incivility-with-kindness-reminders/
+- Nextdoor's "Kindness Reminder": 1 in 5 users who saw the prompt edited their comment (unverified — source returned 403/blocked at check time). https://www.inman.com/2019/09/20/nextdoor-tries-to-curb-incivility-with-kindness-reminders/
 - The Indian equivalents are class, caste, religion and nationality profiling of workers and outsiders.
   - Rest of World: https://restofworld.org/2023/home-monitoring-mygate-digital-bias/
   - Hyderabad police statements singling out Nepali workers: https://www.siasat.com/more-than-18000-residents-register-domestic-help-under-mee-suraksha-3477085/
@@ -187,13 +186,8 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 ### 7. Cold start: sell to the RWA committee, free for residents, guard-first UX, and do things that don't scale (Medium–Strong)
 
 **Evidence from MyGate**
-- The founders shadowed guards for weeks and built a "dial-based interface that mimicked the guards' existing habits".
-- They installed free in 3 Bengaluru communities (~3,000 homes). Word of mouth then spread to other societies.
-- Contracts included unlimited guard training.
-- Sources:
-  - https://www.businesstoday.in/amp/trending/story/this-iit-iim-grad-took-a-guards-job-to-build-mygate-now-valued-at-rs-1670-crore-484966-2025-07-16
-  - https://www.thenewsminute.com/article/mygate-raises-rs-65-crore-series-round-led-prime-venture-partners-90156
-  - https://www.entrepreneur.com/article/343751
+- The founders shadowed guards for nearly a month and built a phone-dial-style interface modelled on how guards already used phones. https://www.businesstoday.in/amp/trending/story/this-iit-iim-grad-took-a-guards-job-to-build-mygate-now-valued-at-rs-1670-crore-484966-2025-07-16
+- MyGate offered training guards "any time and any number of times". https://www.thenewsminute.com/article/mygate-raises-rs-65-crore-series-round-led-prime-venture-partners-90156
 - 1,000 communities in about 18 months, using leased guard devices (The Ken, Dec 2018). https://the-ken.com/story/mygate-could-use-a-leg-up/
 - Today MyGate offers a "low-cost subscription plan or… even a complimentary model" and monetises through ads. https://inc42.com/buzz/mygate-trims-fy25-loss-by-61-to-%E2%82%B915-4-cr/
 
@@ -203,7 +197,7 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - https://the-ken.com/story/nobroker-wanted-to-eat-mygates-lunch-but-housing-societies-had-other-ideas/
 
 **Evidence from Nextdoor**
-- A founding member must recruit about 10 households (earlier: 9 neighbours within 21 days). The founder names the neighbourhood and draws its boundary.
+- A founding member must recruit about 10 households (earlier: 9 neighbours within 21 days; unverified — source returned 403/blocked at check time). The founder names the neighbourhood and draws its boundary.
   - https://en.wikipedia.org/wiki/Nextdoor
   - https://www.inman.com/news/2012/07/24/nextdoor-raises-186-million
 - Nextdoor paid to print and mail invitation postcards ("millions of dollars"). https://www.alexanderjarvis.com/nextdoor-doing-things-that-dont-scale
@@ -245,15 +239,15 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 ### 9. Multilingual UI, offline-tolerant guard app, low-end device support (Medium)
 
 **Evidence**
-- 57% of (urban) internet users prefer regional-language content, and 98% access some Indic-language content (IAMAI–Kantar 2024). https://www.businesstoday.in/amp/technology/news/story/indias-internet-revolution-key-insights-from-kantar-and-iamai-report-461043-2025-01-16
-- 13% of offline Indians cite the lack of local-language content (same source).
+- 57% of internet users prefer regional-language content (IAMAI–Kantar 2024). https://www.businesstoday.in/amp/technology/news/story/indias-internet-revolution-key-insights-from-kantar-and-iamai-report-461043-2025-01-16
+- 13% of offline respondents cite unavailability of local-language content as a reason (same source).
 - NoBrokerHood's guard app markets 8 languages and offline entry that syncs later in basements and dead zones. https://www.nobrokerhood.com/solutions/gatekeeper-app
 - I found no published language list for MyGate's guard app.
 - Team-BHP users doubt that elders and guards can manage these apps. Same thread as in #8.
 - MyGate users complain about connectivity errors.
   - https://g2.com/products/mygate/reviews
   - https://kimola.com/reports/unlock-insights-with-our-mygate-app-feedback-report-google-play-en-us-152154 (now returns 410; search snippet only)
-- Device mix: phones under ₹10k reportedly fell from about 18% of shipments (Q3 2025) to about 4% (Q2 2026) because memory prices rose. New low-end phones are getting scarcer, but the installed base of older low-end phones still matters for workers and guards. https://www.businesstoday.in/technology/news/story/india-smartphone-market-hits-five-year-low-phones-under-rs-10000-are-fast-disappearing-548685-2026-08-12
+- Device mix: IDC data reported by Business Today (12 Aug 2026) show phones under $100 fell from 18% to 8% of shipments (Q1 2026) as DRAM/NAND costs rose; overall Q2 2026 shipments fell 11.1% y/y. New low-end phones are getting scarcer, but the installed base of older low-end phones still matters for workers and guards. https://www.businesstoday.in/technology/news/story/india-smartphone-market-hits-five-year-low-phones-under-rs-10000-are-fast-disappearing-548685-2026-08-12
 
 **Product action**
 - Launch in Hindi plus the language of each launch city.
@@ -276,7 +270,7 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - Nextdoor self-serve: Local Deals from $1 and ads from $5/day (third-party). The UK launch said "minimum spend of just a few pounds".
   - https://us.fitgap.com/products/nextdoor-business
   - https://about.nextdoor.com/gb/news/nextdoor-announces-new-self-serve-ads-platform-for-small-businesses
-- Justdial averaged about ₹17,600/year per paid listing in 2014. This is old; current pricing is not published. https://www.valueresearchonline.com/stories/28027/dialling-it-right/
+- Justdial averaged about ₹17,600/year per paid listing in 2014 (unverified — source returned 403/blocked at check time). This is old; current pricing is not published. https://www.valueresearchonline.com/stories/28027/dialling-it-right/
 
 **Evidence: MSME channels**
 - Facebook (49%) and Google Search (43%) are the most-used ad platforms among MSMEs that advertise digitally (ISF/IPSOS). https://www.mediainfoline.com/brand/overregulation-of-data-and-digital-tools-risks-undermining-msme-success-in-india-reveals-india-sme-forum-survey
@@ -290,7 +284,7 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - Keep ads out of the gate and alerts channels (#1).
 
 **Also noted (evidence for direction, not ranked):** utility features beyond gated societies.
-- Shuru (tier-2 hyperlocal: local news, classifieds, shop promotion) raised about ₹29 crore in May 2025 and claims about 2M MAU, a company claim. https://inc42.com/buzz/roposo-cofounders-hyperlocal-community-startup-shuru-bags-inr-29-cr/
+- Shuru (tier-2 hyperlocal: local news, classifieds, shop promotion) raised about ₹29 crore in May 2025 and claims a user base of 1 crore (company claim; not an MAU figure). https://inc42.com/buzz/roposo-cofounders-hyperlocal-community-startup-shuru-bags-inr-29-cr/
 - Nextdoor's 2025 "NEXT" relaunch pivoted toward alerts (weather, traffic, safety, service interruptions), local news and AI-summarised recommendations. https://axios.com/2025/07/15/nextdoor-app-ai-reboot
 - This supports alerts and recommendations as engagement drivers, for example water-tanker and power-cut alerts. Indian demand for tanker coordination is documented.
   - Bengaluru's government tanker app had about 10k downloads and a 2.8 rating: https://www.deccanherald.com/india/karnataka/bengaluru/bwssb-plans-long-term-sanchari-cauvery-pacts-for-bengaluru-residents-4091007
@@ -304,15 +298,15 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 |---|---|---|---|
 | **MyGate** | Gate/visitor, daily help, dues, amenity booking, helpdesk, notices/polls, ERP; claims 27K+ communities and 5M+ homes ([mygate.com](https://mygate.com/)) | Ads plus SaaS plus hardware (smart locks since Oct 2024). Low-cost or free plans for societies. FY25 operating revenue ₹173.5 Cr, net loss ₹15.4 Cr ([Inc42](https://inc42.com/buzz/mygate-trims-fy25-loss-by-61-to-%E2%82%B915-4-cr/)). FY24 ₹96.2 Cr ([Entrackr](https://entrackr.com/fintrackr/mygate-total-revenue-nears-rs-110-cr-in-fy24-losses-shrink-by-82-7374229)). Resident ad-free plan ₹99/mo or ₹999/yr ([App Store](https://apps.apple.com/in/app/mygate-premium/id1101762651)). | Ads in notifications (Part A #1). Opt-out consent and delivery-app data sharing ([Deccan Chronicle 2020](https://www.deccanchronicle.com/nation/current-affairs/310120/hyderabad-residents-using-mygate-feel-insecure.html)). Worker surveillance ([Rest of World](https://restofworld.org/2023/home-monitoring-mygate-digital-bias/)). Conflicting statements on UPI platform fees: the blog says a platform fee may apply ([blog](https://mygate.com/blog/insights/upi-payments-on-mygate/)); the help centre says fees come from gateways and UPI is subsidised ([help](https://help.mygate.in/articles/131668-what-are-transaction-charges-that-are-showing-while-making-payment-via-mygate-app)). |
 | **NoBrokerHood (NoBroker)** | Visitor, delivery and staff management, guard patrol, SOS, facility booking, accounts, complaints, polls and e-elections ([SoftwareSuggest](https://www.softwaresuggest.com/nobrokerhood)). Guard app in 8 languages, works offline ([NBH](https://www.nobrokerhood.com/solutions/gatekeeper-app)) | Free plan against MyGate's paid plan. Later *paid* societies to adopt ([The Ken, Jan 2024](https://the-ken.com/story/nobroker-wanted-to-eat-mygates-lunch-but-housing-societies-had-other-ideas/)). Society counts conflict between sources: 18,000+ vs 25,000+ ([getprospect](https://getprospect.com/business-directory/nobrokerhood), [weekday](https://jobs.weekday.works/wkdyui168c)). | More ads; residents distrust committees that switch ([The Ken](https://the-ken.com/story/nobroker-wanted-to-eat-mygates-lunch-but-housing-societies-had-other-ideas/)). Voxya complaints: no self-serve account deletion; UPI payment shown as failed; prepaid cleaning service not delivered ([1](https://voxya.com/consumer-complaints/not-deleting-my-account/178190), [2](https://voxya.com/consumer-complaints/payment-status-not-updated/135398), [3](https://voxya.com/consumer-complaints/service-not-delivered-/188462)). Team-BHP: "clunkier", fewer recurring pre-approval options, alert tone "resembles a tornado siren" ([thread](https://www.team-bhp.com/forum/shifting-gears/266681-mygate-vs-apnacomplex-vs-nobroker-vs-other-society-management-apps-2.html)). |
-| **ApnaComplex (ANAROCK)** | Society ERP, billing, gate, helpdesk. About 20,000 societies and 600k households claimed at acquisition ([GPC](https://globalprivatecapital.org/?p=26061)) | Acquired by ANAROCK from NestAway (Jan 2021) ([IndianWeb2](https://www.indianweb2.com/2021/01/anarock-acquires-society-and-apartment.html?hl=ar)). Price is quoted per flat; third-party blogs say from about ₹4–6/flat/month ([Codingclave, a vendor](https://codingclave.com/blog/best-society-management-app-india-2026)). A LinkedIn commenter cited about ₹75k/year ([search result](https://www.linkedin.com/posts/prateekkole_hi-abhishek-kumar-im-forced-to-download-activity-6976412865566035969-vgSC)). | Worker rating feature removed, then restored "due to demand" ([Rest of World](https://restofworld.org/2023/home-monitoring-mygate-digital-bias/)). |
+| **ApnaComplex (ANAROCK)** | Society ERP, billing, gate, helpdesk. About 20,000 societies and 600k households claimed at acquisition ([GPC](https://globalprivatecapital.org/?p=26061)) | Acquired by ANAROCK from NestAway (Jan 2021) ([IndianWeb2](https://www.indianweb2.com/2021/01/anarock-acquires-society-and-apartment.html?hl=ar)). Price is quoted per flat; third-party blogs say from about ₹4–6/flat/month ([Codingclave, a vendor](https://codingclave.com/blog/best-society-management-app-india-2026)). A LinkedIn commenter cited about ₹75k/year ([search result](https://www.linkedin.com/posts/prateekkole_hi-abhishek-kumar-im-forced-to-download-activity-6976412865566035969-vgSC)). | Worker rating feature removed, then brought back because there was demand ([Rest of World](https://restofworld.org/2023/home-monitoring-mygate-digital-bias/)). |
 | **ADDA** | Society ERP, gatekeeper, community. Claims 25,000+ communities and 7.5M users ([ADDA](https://ind.adda.io/partners)) | Ad-free; "only revenue is from software subscriptions" ([ADDA](https://ind.adda.io/partners)). Quote-based pricing ([SoftwareSuggest](https://www.softwaresuggest.com/apartment-adda)). | **Nov 2025 breach: 1.86M records** ([Entrackr](https://entrackr.com/snippets/hacker-claims-leak-of-186-mn-addaio-records-10814550)). |
-| **Nextdoor** | Verified neighbourhood network: 100M+ Verified Neighbors; Q1 2025 revenue $54M ([Q1 2025](https://investors.nextdoor.com/news/news-details/2025/Nextdoor-Reports-First-Quarter-2025-Results/default.aspx)) | Ads, including self-serve local ads. | **Never launched in India.** In 2017 the CEO named India as an expansion target ([TechCrunch](https://techcrunch.com/2017/12/11/nextdoor-raised-about-75-million-to-connect-neighbors)). Present in 11 countries per a secondary source ([thinkinsights](https://thinkinsights.net/leadership/nextdoor-business-model-2026)); no India launch found. Known issues: racial profiling, which it addressed with form redesign (Part A #6). Stock down more than 80% since its 2021 SPAC ([Axios](https://axios.com/2025/07/15/nextdoor-app-ai-reboot)). |
+| **Nextdoor** | Verified neighbourhood network: 100M+ verified neighbours per company marketing copy (not the Q1 release, which cites 345,000+ neighbourhoods in 11 countries); Q1 2025 revenue $54M ([Q1 2025](https://investors.nextdoor.com/news/news-details/2025/Nextdoor-Reports-First-Quarter-2025-Results/default.aspx)) | Ads, including self-serve local ads. | **Never launched in India.** In 2017 the CEO named India as an expansion target ([TechCrunch](https://techcrunch.com/2017/12/11/nextdoor-raised-about-75-million-to-connect-neighbors)). Present in 11 countries per a secondary source ([thinkinsights](https://thinkinsights.net/leadership/nextdoor-business-model-2026)); no India launch found. Known issues: racial profiling, which it addressed with form redesign (Part A #6). Stock down more than 80% since its 2021 SPAC (unverified — source returned 403/blocked at check time) ([Axios](https://axios.com/2025/07/15/nextdoor-app-ai-reboot)). |
 | **LocalCircles** | Citizen engagement and community platform, launched in Delhi in 2013 with RWA positioning ([ITVoice](https://www.itvoice.in/honble-chief-minister-delhi-mrs-dikshit-launched-localcircles-com)) | "Free for citizens". Funding accounts conflict ([civictech](https://civictech.guide/listing/local-circles), [Inc42](https://inc42.com/flash-feed/puneet-dalmia-invests-in-localcircles/amp/)). | App Store rating 3.0 on few reviews ([App Store](https://apps.apple.com/us/app/localcircles/id707948385?ls=1)). No current RWA product found. |
 | **WhatsApp / Facebook groups** | The default society channel | Free | "Message overload, misinformation, no official record" (ADDA, vendor) ([ADDA](https://blog.ind.adda.io/2025/11/common-challenges-faced-by-rwas/)). No independent Facebook-group usage data found. |
-| **Urban Company** (workers) | Home services marketplace; "Insta Help" 15-minute house help, ₹49/hr intro, ₹245/hr standard ([Outlook Business](https://www.outlookbusiness.com/start-up/news/urban-company-renames-insta-maids-to-insta-help-after-backlash)) | Commission marketplace. Strategic investor in MyGate ([Business Today](https://www.businesstoday.in/amp/entrepreneurship/story/mygate-raises-rs-100-crore-from-urban-company-and-acko-353940-2022-11-23)) | Worker protests over commissions up to 35% and a 4.8 rating rule ([KrASIA](https://amp.kr-asia.com/home-services-marketplace-urban-company-faces-heat-from-women-workers-over-unfair-work-practices)); ID blocking ([The Ken](https://the-ken.com/story/urban-company-is-caught-between-angry-customers-and-angrier-partners/)). |
-| **Justdial** | Local search and directory | Free basic listing; paid priority listings priced by city, category and package ([markhub24](https://www.markhub24.com/post/justdial-s-local-search-monetization-model)). About ₹17,600/yr average in 2014 ([Value Research](https://www.valueresearchonline.com/stories/28027/dialling-it-right/)). | Telesales-driven; a complaint describes a listing not activated after payment ([Voxya](https://voxya.com/consumer-complaints/paid-listing-just-dail/109814)). |
+| **Urban Company** (workers) | Home services marketplace; "Insta Help" 15-minute house help, ₹49/hr intro, ₹245/hr standard ([Outlook Business](https://www.outlookbusiness.com/start-up/news/urban-company-renames-insta-maids-to-insta-help-after-backlash)) | Commission marketplace. Strategic investor in MyGate ([Business Today](https://www.businesstoday.in/amp/entrepreneurship/story/mygate-raises-rs-100-crore-from-urban-company-and-acko-353940-2022-11-23)) | Worker protests over commission hikes to "over 30%" (workers sought a 20% cap) ([KrASIA](https://amp.kr-asia.com/home-services-marketplace-urban-company-faces-heat-from-women-workers-over-unfair-work-practices)); ID blocking ([The Ken](https://the-ken.com/story/urban-company-is-caught-between-angry-customers-and-angrier-partners/)). |
+| **Justdial** | Local search and directory | Free basic listing; paid priority listings priced by city, category and package ([markhub24](https://www.markhub24.com/post/justdial-s-local-search-monetization-model)). About ₹17,600/yr average in 2014 (unverified — source returned 403/blocked at check time) ([Value Research](https://www.valueresearchonline.com/stories/28027/dialling-it-right/)). | Telesales-driven; a complaint describes a listing not activated after payment ([Voxya](https://voxya.com/consumer-complaints/paid-listing-just-dail/109814)). |
 | **Google Business Profile / Maps** | Free local listings | Free; Google Ads for paid reach | Google itself shut Neighbourly and pointed users to Local Guides/Maps ([TechCrunch](https://techcrunch.com/2020/04/01/google-to-shut-down-its-india-focused-qa-app-neighbourly)). |
-| **Shuru** (2021–) | Hyperlocal app for tier-2 cities: local news, classifieds, shop promotion | Series A of about ₹29 Cr led by Krafton (May 2025). Claims about 2M MAU ([Inc42](https://inc42.com/buzz/roposo-cofounders-hyperlocal-community-startup-shuru-bags-inr-29-cr/)) | Too early; claims are unverified. |
+| **Shuru** (2021–) | Hyperlocal app for tier-2 cities: local news, classifieds, shop promotion | Series A of about ₹29 Cr led by Krafton (May 2025). Claims a user base of 1 crore (company claim; not an MAU figure) ([Inc42](https://inc42.com/buzz/roposo-cofounders-hyperlocal-community-startup-shuru-bags-inr-29-cr/)) | Too early; claims are unverified. |
 | **Lokal / Public (Inshorts)** | Hyperlocal content, classifieds, location-based video | Lokal Series B ₹120 Cr ([Inc42](https://inc42.com/startups/lokal-app-bharat-revenue-hyperlocal-classifieds-series-b-funding/)). Public reportedly burned $2M per month ([OfficeChai](https://officechai.com/startups/inshorts-owned-app-public-raises-41-million-now-valued-at-250-million/)) | Expensive to run; Inshorts lost ₹228 Cr in FY24 ([Wikipedia](https://en.wikipedia.org/wiki/Inshorts)). |
 | **Shutdowns** | Google Neighbourly (2020); Manch (about 2020); Dunzo (Jan 2025) | — | Neighbourly and Manch: too few users or contributors ([TechCrunch](https://techcrunch.com/2020/04/01/google-to-shut-down-its-india-focused-qa-app-neighbourly), [Inc42](https://inc42.com/buzz/social-platform-manch-may-shut-its-operations/)). Dunzo: drifted from trusted hyperlocal errands into capital-heavy quick commerce, burning over ₹230 per order ([Rest of World](https://restofworld.org/2025/dunzo-shutdown-india-quick-commerce/), [Outlook Business](https://www.outlookbusiness.com/start-up/e-commerce/dunzos-downfall-explained-what-led-reliance-to-write-off-entire-200-million-stake-in-start-up)). I found no 2023–2026 shutdown of a pure "Indian Nextdoor". |
 
@@ -359,15 +353,15 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - Rules notified 13/14 Nov 2025.
   - Consent-manager provisions apply after about 12 months (≈13 Nov 2026).
   - Notice, consent, security, breach, rights, retention and children's obligations apply after about 18 months (≈13 May 2027).
-- Sources: [PIB](https://static.pib.gov.in/WriteReadData/specificdocs/documents/2025/nov/doc20251117695301.pdf), [Deccan Herald](https://www.deccanherald.com/amp/story/india%2Fcentre-notifies-dpdp-rules-implementation-planned-in-phases-spread-over-12-18-months-3798465), [compliancehub](https://compliancehub.wiki/india-dpdp-consent-manager-november-2026-phase-two-deadline-compliance/)
+- Sources: [PIB](https://static.pib.gov.in/WriteReadData/specificdocs/documents/2025/nov/doc20251117695301.pdf) (does not state the 12-month consent-manager phase), [Thales brief](https://cpl.thalesgroup.com/sites/default/files/content/compliance_brief/india-dpdp-rules-2025-compliance-guide-cb.pdf) (states 13 Nov 2026 and 13 May 2027), [Deccan Herald](https://www.deccanherald.com/amp/story/india%2Fcentre-notifies-dpdp-rules-implementation-planned-in-phases-spread-over-12-18-months-3798465), [compliancehub](https://compliancehub.wiki/india-dpdp-consent-manager-november-2026-phase-two-deadline-compliance/)
 - **Build to the 2027 standard from day one.**
 
 **Checklist**
 - [ ] **Consent:** free, specific, informed, unconditional, unambiguous, given by clear affirmative action. Consent requests available in English or Eighth Schedule languages. Withdrawal as easy as giving consent. Stop processing, and make processors stop, after withdrawal (s.6(1), 6(3), 6(4), 6(6)). [dpdpa.com s.6](https://dpdpa.com/dpdpa2023/chapter-2/section6.html)
 - [ ] **Erasure:** erase on withdrawal or once the purpose is served, including at processors (s.8(7)). [dpdpa.com s.8](https://www.dpdpa.com/dpdpa2023/chapter-2/section8.html)
-- [ ] **Inactive-user erasure (Third Schedule):** applies only to social media intermediaries with at least 2 crore registered users, e-commerce entities with at least 2 crore, and gaming with at least 50 lakh. Erase after 3 years of inactivity, with a 48-hour warning. Not applicable at launch, but design for it. [storyboard18](https://www.storyboard18.com/digital/breaking-dpdp-final-rules-out-consent-managers-face-tight-eligibility-e-commerce-social-platforms-get-3-year-data-limitbreaking-dpdp-final-rules-out-consent-managers-face-tight-eligibility-e-comm-84204.htm), [DPDP wiki](https://dpdp.myndsolution.com/wiki/rules/schedule-3-class-of-data-fiduciaries-purposes-time-period/)
+- [ ] **Inactive-user erasure (Third Schedule):** applies only to social media intermediaries with at least 2 crore registered users, e-commerce entities with at least 2 crore, and gaming with at least 50 lakh. Erase after 3 years of inactivity, with 48-hour prior notice ([Thales brief](https://cpl.thalesgroup.com/sites/default/files/content/compliance_brief/india-dpdp-rules-2025-compliance-guide-cb.pdf)). Not applicable at launch, but design for it. [storyboard18](https://www.storyboard18.com/digital/breaking-dpdp-final-rules-out-consent-managers-face-tight-eligibility-e-commerce-social-platforms-get-3-year-data-limitbreaking-dpdp-final-rules-out-consent-managers-face-tight-eligibility-e-comm-84204.htm), [DPDP wiki](https://dpdp.myndsolution.com/wiki/rules/schedule-3-class-of-data-fiduciaries-purposes-time-period/) (503 at check time)
 - [ ] **Children (under 18):**
-  - Verifiable parental consent (DigiLocker or a token are accepted methods).
+  - Verifiable parental consent (DigiLocker, or a token (unverified — check Rule 10), are accepted methods).
   - No tracking, behavioural monitoring or targeted ads aimed at children (s.9).
   - Simplest path: an **18+ only** policy with age declaration, plus parental-consent flows if teens are allowed later.
   - Sources: [Thales brief](https://cpl.thalesgroup.com/sites/default/files/content/compliance_brief/india-dpdp-rules-2025-compliance-guide-cb.pdf), [Seclore](https://www.seclore.com/fundamentals/dpdp-rules-2025-compliance-guide/)
@@ -375,7 +369,7 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - [ ] **Roles with RWAs:** commentary treats the RWA as data fiduciary for society data. Sign a fiduciary/processor agreement per society that bars secondary use, including ads targeting from society data. [KSK](https://ksandk.com/data-protection-and-data-privacy/dpdp-act-rwa-compliance-guide/)
   - For neighbourhood-feed data Mohalla Connect collects directly, Mohalla Connect itself is the fiduciary. This split is my inference; I found no source.
 - [ ] **Domestic-worker data:** don't rely on the s.7(i) "employment" exemption for society-wide attendance logs without legal advice. Get workers' consent in their language. [dpdpa.com s.7](https://www.dpdpa.com/dpdpa2023/chapter-2/section7.html), [Rest of World](https://restofworld.org/2023/home-monitoring-mygate-digital-bias/)
-- [ ] **CCTV, biometrics and face recognition:** avoid at launch. Commentary flags them as the highest-risk data. [KSK](https://ksandk.com/data-protection-and-data-privacy/dpdp-act-rwa-compliance-guide/)
+- [ ] **CCTV, biometrics and face recognition:** avoid at launch. Commentary flags biometrics/face recognition as higher-risk; CCTV needs a documented governance framework. [KSK](https://ksandk.com/data-protection-and-data-privacy/dpdp-act-rwa-compliance-guide/)
 
 ### D2. Aadhaar
 - [ ] **Do not collect, store or require Aadhaar numbers or photocopies.** Private demand for Aadhaar was curtailed after Puttaswamy (2018). [Inc42](https://inc42.com/?p=137226), [LiveLaw](https://www.livelaw.in/aadhaar-judgment-certain-concerns)
@@ -384,9 +378,10 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
   - register as an OVSE under the 2021 regulations as amended (Reg. 13A)
   - take explicit consent and limit use to the stated purpose
   - follow UIDAI's OVSE do's and don'ts
-  - Sources: [UIDAI regs](https://www.uidai.gov.in/images/The_Aadhaar_Authentication_and_Offline_Verifications_Regulations_2021.pdf), [UIDAI Do's/Don'ts](https://www.uidai.gov.in/images/DosandDon_ts_for_Offline_Verification_Seeking_entities.pdf)
+  - Sources: [UIDAI regs](https://old.uidai.gov.in/images/The_Aadhaar_Authentication_and_Offline_Verifications_Regulations_2021-_Clean_copy-30122025.pdf), [UIDAI Do's/Don'ts](https://www.uidai.gov.in/images/DosandDon_ts_for_Offline_Verification_Seeking_entities.pdf)
 - [ ] **Prefer DigiLocker Requester integration:**
-  - Indian entity, senior signatory, official email domain
+  - Indian entity, registration via a DigiLocker account of authorised personnel, official email domain
+  - demonstrable experience providing online services to Indian citizens, and a functional website
   - servers located in India for foreign firms
   - Sources: [Partners SOP](https://cf-media.api-setu.in/resources/Partners-SOP.pdf), [FAQ](https://www.digilocker.gov.in/assets/FAQ%20DL%20EL_onboarding.pdf)
 
@@ -394,7 +389,7 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - [ ] **Grievance officer:** publish name and contact. Acknowledge complaints within 24 hours. Resolve within **7 days**; the 2026 amendment cut this from 15. [iPleaders](https://blog.ipleaders.in/it-rules-2026/), [iPleaders 2021](https://blog.ipleaders.in/information-technology-guidelines-intermediaries-digital-media-ethics-code-rules-2021/)
 - [ ] **Takedown on court or authorised government orders:** within **3 hours** (from 36), effective 20 Feb 2026. [Mondaq](https://www.mondaq.com/india-it-intermediary-rules-amended-%E2%80%93-new-obligations-for-ai-synthetic-content/1743594), [Hogan Lovells](https://www.hlc.com/en/publications/india-introduces-mandatory-labelling-for-ai-and-3hour-takedown-for-illegal-content)
 - [ ] **Non-consensual intimate imagery and impersonation complaints:** within **2 hours** (from 24). [Mondaq](https://www.mondaq.com/india-it-intermediary-rules-amended-%E2%80%93-new-obligations-for-ai-synthetic-content/1743594)
-- [ ] **User removal-request complaints:** 72 hours under the 2022 amendment. I couldn't confirm whether 2026 changed this; verify. [Newslaundry (draft)](https://www.newslaundry.com/2022/06/07/it-rules-draft-proposal-to-set-up-grievance-committee-goes-live-for-public-feedback), [Verdictum (final 2022)](https://www.verdictum.in/news/it-amendment-rules-2022-1445726)
+- [ ] **User removal-request complaints:** 72 hours, per the 2022 *draft* amendment as reported by Newslaundry; the Verdictum report on the final 2022 rules supports only the 30-day appeal (below), not the 72-hour figure. Confirm against the final text, and whether 2026 changed it. [Newslaundry (draft)](https://www.newslaundry.com/2022/06/07/it-rules-draft-proposal-to-set-up-grievance-committee-goes-live-for-public-feedback)
 - [ ] **Appeals:** support appeals to the Grievance Appellate Committee within 30 days. [Verdictum](https://www.verdictum.in/news/it-amendment-rules-2022-1445726)
 - [ ] **Assistance to law enforcement:** provide information when lawfully ordered within 72 hours. [iPleaders](https://blog.ipleaders.in/information-technology-guidelines-intermediaries-digital-media-ethics-code-rules-2021/)
 - [ ] **Rules reminder:** tell users at least **every three months** that violations can lead to removal or suspension (2026). [Hogan Lovells](https://www.hlc.com/en/publications/india-introduces-mandatory-labelling-for-ai-and-3hour-takedown-for-illegal-content)
@@ -402,18 +397,18 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - [ ] **At 50 lakh registered users you become a Significant Social Media Intermediary.** Duties:
   - India-resident Chief Compliance Officer, nodal contact and resident grievance officer
   - monthly compliance reports
-  - a **voluntary** verification mechanism with a visible badge
+  - a **voluntary** verification mechanism with a visible badge (not in the cited sources — verify against Rule 4(7))
   - Sources: [Business Today](https://www.businesstoday.in/amp/latest/economy-politics/story/new-it-rules-govt-fixes-50-lakh-users-threshold-to-define-significant-social-media-intermediary-289547-2021-02-27), [iPleaders](https://blog.ipleaders.in/information-technology-guidelines-intermediaries-digital-media-ethics-code-rules-2021/)
 
 ### D4. TRAI DLT (SMS and OTP)
-- [ ] Register on DLT: Principal Entity, header (sender ID) and **each template**. Carriers scrub message content against approved templates in real time. [Plivo](https://www.plivo.com/docs/sms/concepts/dlt-registration-process), [Telerivet](https://www.telerivet.com/blog/india-sms-compliance-trai-dlt-registration-and-tcccpr-guide)
+- [ ] Register on DLT: Principal Entity, header (sender ID) and **each template**. Carriers scrub message content against approved templates in real time. [Telerivet](https://www.telerivet.com/blog/india-sms-compliance-trai-dlt-registration-and-tcccpr-guide)
 - [ ] Since 6 May 2025, operators append -P/-S/-T/-G suffixes to headers automatically. Classify messages correctly: OTP as transactional or service; offers as promotional, with consent. [EnableX](https://www.enablex.io/insights/a-step-by-step-guide-to-dlt-registration/)
-- [ ] Registration fee of about ₹5,900 per operator portal; this is a single third-party figure, so verify. [EnableX](https://www.enablex.io/insights/a-step-by-step-guide-to-dlt-registration/)
+- [ ] Fees: entity registration ≈ ₹5,900 + GST one-time with annual renewal; headers ≈ ₹590/year (Telerivet, vendor). [Telerivet](https://www.telerivet.com/blog/india-sms-compliance-trai-dlt-registration-and-tcccpr-guide)
 
 ### D5. RBI: ad-credit wallets, maintenance payments
 - [ ] **Ad credits must stay a closed-system PPI.** The RBI defines closed-system PPIs as issued "for facilitating the purchase of goods and services from that entity only" with no cash withdrawal. The RBI does not regulate or supervise them.
   - Non-withdrawable, non-transferable credits redeemable only for Mohalla Connect's own ad products should qualify. My inference; confirm with counsel.
-  - Sources: [RBI MD (updated Dec 2024)](https://website.rbi.org.in/documents/87730/39710850/82MDPPIS_UpdatedasonDecember272024.pdf), [RBI FAQ](https://rbi.org.in/scripts/FS_FAQs.aspx?Id=126)
+  - Sources: [RBI MD (updated 30 Sep 2026)](https://rbi.org.in/scripts/BS_ViewMasDirections.aspx?id=12156), [RBI FAQ](https://rbi.org.in/scripts/FS_FAQs.aspx?Id=126)
 - [ ] **Do NOT let credits pay local merchants, workers or other users.** That makes the wallet semi-closed or small-PPI territory, which needs RBI authorisation.
   - The April 2026 **draft** PPI Directions keep closed-system PPIs outside RBI regulation but carve out *marketplace-issued* PPIs used to buy from marketplace sellers. Those would need authorisation.
   - Sources: [AZB, 1 Jun 2026](https://www.azbpartners.com/bank/decoding-the-key-changes-proposed-under-the-simplified-master-direction-on-prepaid-payment-instruments-issued-by-the-rbi/), [RBI draft](https://www.rbi.org.in/scripts/bs_viewcontent.aspx?Id=4987)
@@ -423,22 +418,22 @@ Never store Aadhaar images or numbers. Apply for OVSE registration if you use th
 - [ ] **Show any convenience fee before payment.** MyGate's inconsistent messaging (Part C #5) is the trap to avoid.
 
 ### D6. GST
-- [ ] Charge **18% GST** on internet advertising space (SAC 998365). Sources say the rate is unchanged after the 22 Sep 2025 rationalisation (vendor sources). [BUSY](https://busy.in/sac-code-998365/), [Credlix](https://www.credlix.com/hsn-code/998363)
+- [ ] Charge **18% GST** on internet advertising space (SAC 998365). Sources say the rate is unchanged after the 22 Sep 2025 rationalisation (vendor sources). [BUSY](https://busy.in/sac-code-998365/)
 - [ ] **Prepaid ad credits:** for services, GST time of supply is generally the earliest of invoice, provision of service or receipt of an advance. A top-up may therefore be taxable when received.
   - Get advice on voucher treatment (CGST s.12/13).
   - Sources: [GST Council flyer](https://gstcouncil.gov.in/sites/default/files/e-version-gst-flyers/51_GST_Flyer_Chapter6.pdf), [Tally](https://tallysolutions.com/gst/when-is-gst-payable-on-advance-payments-rules-for-goods-vs-services/)
-- [ ] For foreign tools you buy (for example Meta or Google ads), the 6% equalisation levy was abolished from 1 Apr 2025; 18% IGST under reverse charge still applies. [Deccan Herald](https://www.deccanherald.com/amp/story/business/govt-to-abolish-google-tax-amid-trumps-tariff-threat-3462385), [TaxGuru](https://taxguru.in/goods-and-service-tax/oidar-services-taxability.html)
+- [ ] For foreign tools you buy (for example Meta or Google ads), the 6% equalisation levy was abolished from 1 Apr 2025 (unverified — source returned 403/blocked at check time; abolition was proposed in the March 2025 Finance Bill amendments); 18% IGST under reverse charge still applies. [Deccan Herald](https://www.deccanherald.com/amp/story/business/govt-to-abolish-google-tax-amid-trumps-tariff-threat-3462385), [TaxGuru](https://taxguru.in/goods-and-service-tax/oidar-services-taxability.html)
 
 ### D7. Domestic-worker verification and labour
 - [ ] **Don't claim police verification is "mandatory" everywhere.**
-  - Delhi Police "requests" verification (Lok Sabha answer). Penalties arise only from local orders under BNSS s.163, with BNS s.223 for violations. [eparlib](https://eparlib.nic.in/bitstream/123456789/589276/1/93073.pdf), [Kotak (tenant context)](https://www.kotak.com/en/stories-in-focus/loans/home-loan/police-verification-for-tenants.html)
+  - Delhi Police "requests" verification (Lok Sabha answer; unverified — source returned 403/blocked at check time). Penalties arise only from local orders under BNSS s.163, with BNS s.223 for violations. [eparlib](https://eparlib.nic.in/bitstream/123456789/589276/1/93073.pdf), [Kotak (tenant context)](https://www.kotak.com/en/stories-in-focus/loans/home-loan/police-verification-for-tenants.html)
   - Bengaluru treats it as "recommended": ₹375 antecedents check, ₹750 with address check, about 21 days via Seva Sindhu. [Citizen Matters](https://citizenmatters.in/a-guide-to-background-checks-for-hiring-domestic-help-and-staff-in-gated-communities/)
   - Hyderabad (Jul 2026): police "urge" verification after 565 domestic-help theft cases. Verification is free at police stations. [TNM](https://www.thenewsminute.com/telangana/hyderabad-police-urge-mandatory-verification-of-domestic-workers)
   - Malkajgiri's "Mee Suraksha" registered 18,413 workers voluntarily (May 2026). [Siasat](https://www.siasat.com/more-than-18000-residents-register-domestic-help-under-mee-suraksha-3477085/)
   - Mumbai: described as a voluntary scheme (undated source). [JaagoRe](https://www.jaagore.com/articles/know-your-police/process-for-registration-of-domestic-help-with-police)
   - No current Mumbai, Pune or Chennai mandate found.
 - [ ] **Product:** link to the relevant state portal or process. Store only a worker-consented status flag and date, never the police report.
-- [ ] **Karnataka gig-worker welfare fee:** if Mohalla Connect matches workers to jobs for a fee, it may be an "aggregator" under the Karnataka Platform-Based Gig Workers Act 2025. The fee is 1–5% of payouts, notified 16 Feb 2026, and home services are referenced in the Rules' reporting provisions.
+- [ ] **Karnataka gig-worker welfare fee:** if Mohalla Connect matches workers to jobs for a fee, it may be an "aggregator" under the Karnataka Platform-Based Gig Workers Act 2025. The fee is 1–5% of payouts, notified 16 Feb 2026 (the SCC Online schedule lists 1% per category).
   - Simplest way to stay outside it: a directory or reviews model without payments or commission at launch.
   - Sources: [SCC Online](https://www.scconline.com/blog/post/2026/02/18/karnataka-government-notifies-gig-workers-welfare-fee-mandatory/), [KSK](https://ksandk.com/newsletter/karnataka-notifies-platform-based-gig-workers-welfare-law/)
 
@@ -492,3 +487,9 @@ Legend:
   - the final 2026 PPI Directions text
   - Maharashtra's final cooperative-society online-voting rules
 - **Possible mis-dating:** the YourStory/Google MSME study reports a June 2026 survey date, which may be an error. https://yourstory.com/ai-story/google-study-digital-ads-msme-growth-india-2025
+
+---
+
+## Verification log (Oct 2026)
+
+83 claim/URL pairs spot-checked by fetching each source: 48 supported, 18 partly supported, 3 not supported, 5 dead links, 9 unverifiable (403/blocked). The not-supported claims and dead links have been corrected or flagged inline above; Part D statutory points (DPDP sections and penalties, IT Rules 2026 timelines, RBI PPI/PA, GST time of supply) checked out.
