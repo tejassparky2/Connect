@@ -38,18 +38,36 @@
 
 ## 2. Geospatial queries that don't fall over
 
-The brief: *10,000 users within 2 km must not crash the DB.* The rules, all in `geo.ts`:
+The brief says that 10,000 users within 2 km must not crash the database. We tested ten times that. These are the rules (all in `apps/api/src/lib/geo.ts`) and **what we measured** that forced each one:
 
-1. **Filter with `ST_DWithin(geog, centre, metres)`** — index-aware (bounding-box GIST scan, then exact check). Never `ST_Distance(...) < r`.
-2. **Centres are bound parameters**, not joined rows, so the planner always picks the GIST index.
-3. **Nearest-first with KNN `<->`**: the index is walked in distance order and stops at `LIMIT` — the first 30 of 10,000 costs ~30 index probes, not a sort of 10,000.
-4. **Keyset pagination** on `(distance, id)` or `(createdAt, id)`; never `OFFSET`. The *same* expression (`<->`) is used for ORDER BY, the cursor predicate and the displayed value (mixing sphere `<->` with spheroid `ST_Distance` made pages skip/repeat rows — caught by our tests). The cursor distance is bound as a string because Prisma serialises floats with ~15 significant digits.
-5. **Fan-out streaming**: emergency alerts notify everyone within 2 km via `streamUserIdsWithin()` — id-keyset batches of 1,000, so memory is flat for 100k recipients.
-6. **Denormalise location onto posts** so the feed never joins users.
+1. **Filter with `ST_DWithin(geog, centre, metres)`**, which uses the index. Never filter with `ST_Distance(...) < r`.
+2. **Nearest-first lists ("neighbours", "businesses", "workers") walk the GiST index in distance order** (`knnPage`):
+   - **The inner query orders by `<->` only and has no radius in `WHERE`.** On PostgreSQL 16, `ORDER BY dist, id` cannot use the GiST ordering; PG17 adds incremental sort. PostGIS also misestimates clustered points badly: it estimated 10 rows where 100,000 matched. Either problem pushed the planner to a sequential scan plus a full sort (**624 ms** at 100k rows).
+   - **The radius test becomes an `inRange` output column.** The `(distance, id)` keyset and the tie-break are applied in JS over a buffer of `limit + 64` rows. The walk stops at that buffer or at `1.01 × radius`.
+   - **Exact ties wider than the buffer fall back to an exact query,** for example a whole apartment tower sharing one pin. A test puts 150 users on the identical point.
+   - **`EXPLAIN` assertions in `tests/geo.test.ts`** fail the build if a Seq Scan or a full Sort ever comes back.
+3. **One distance expression everywhere.** ORDER BY, the cursor and the displayed value all use sphere `<->`. Mixing it with spheroid `ST_Distance` made pages skip or repeat rows. The cursor distance is passed as a string because Prisma serialises floats to about 15 significant digits. Cursors are sealed with AES-256-GCM and schema-checked, so clients can't forge a cursor to probe locations.
+4. **The feed is time-ordered.** It is `ST_DWithin` plus a `(createdAt, id)` keyset. The worst case was about 63 ms per page with 100k posts in range; the sparse case was 0.05 ms.
+5. **Counts are capped and bucketed.** "Neighbours near you" is a KNN-capped count bucketed to <10 / 10s / 50s / 100s. It is cheap, and it can't be used as a location oracle by moving your pin and watching the count change. Fixing this took neighbourhood stats from **16 → 250 req/s**.
+6. **Database settings (two migrations):**
+   - **`jit = off`.** The planner's cost estimates crossed `jit_above_cost`, so Postgres spent about 35 ms compiling a 5 ms query. Feed page: **43 → 8 ms**.
+   - **`plan_cache_mode = force_custom_plan`.** Prisma uses prepared statements. After five executions Postgres may switch to a generic plan that can't see the actual radius or centre. That was **4× slower (29 → 7 ms)**.
+7. **Fan-out streams.** Emergency alerts reach everyone within 2 km via `streamUserIdsWithin()`, in id-keyset batches of 1,000, so memory stays flat.
+8. **Location is denormalised onto posts,** so the feed never joins users. Post locations are snapped to a ~150 m grid (`ST_SnapToGrid`, 0.0015°) so exact homes never leak.
 
-Verified by `tests/geo.test.ts`: 10,000 users in 2 km + 2,000 decoys → exact counts, `EXPLAIN` shows `users_homeLocation_idx` and no seq scan, average page latency < 100 ms (≈5 ms locally), 7 fan-out batches covering all 10,000 exactly once.
+**Load test** (`e2e/load/run-load.mjs`):
+- Setup: autocannon with 50 connections against a single API process and one Postgres, inside this dev container (not production hardware).
+- Data: 100,000 residents and 20,000 posts.
+- **0 errors and 0 non-2xx responses.**
 
-**Scaling further:** read replicas for feed/directory reads; partition `posts` by month; cache first feed pages per ~500 m geohash cell (Redis, 30 s TTL); move jobs to BullMQ/pg-boss; PgBouncer in transaction mode in front of Postgres.
+| Endpoint | Throughput |
+|---|---|
+| Feed | 62 → **137 req/s** after the fixes above |
+| Neighbourhood stats | 16 → **250 req/s** |
+| Neighbours / businesses / workers directories | about **600 req/s** each |
+| Badges | about **1,000 req/s** |
+
+**Scaling further:** add read replicas for feed and directory reads, partition `posts` by month, and cache first feed pages per ~500 m geohash cell (Redis, 30 s TTL). Move jobs to BullMQ or pg-boss. Put PgBouncer in transaction mode in front of Postgres (this needs Prisma's `pgbouncer=true`). Prefer **PostgreSQL 17**.
 
 ## 3. Trust & verification without manual overhead
 
@@ -59,9 +77,9 @@ Level is **derived from evidence** by `recomputeLevel()`, never set by a route �
 |---|---|---|
 | `PHONE` | OTP (Indian SIMs are KYC'd → real identity anchor) | Read the feed |
 | `LOCATION` | Home pin + **2 on-device GPS checks ≥ 6 h apart** within 200 m, accuracy ≤ 150 m, mock-location flag rejected | Post, comment, message, list businesses/workers, create a society |
-| `ADDRESS` | Any one of: approval by the RWA of a **platform-verified** society (home within 500 m); invite code + auto-approve; **2 vouches** from ADDRESS-verified neighbours within 1 km (max 5 vouches/month each) | Vouch for others & workers, full trust badge |
+| `ADDRESS` | LOCATION (GPS) **plus** any one of: approval by the RWA of a **platform-verified** society (home within 500 m); invite code + auto-approve; **2 vouches** from ADDRESS-verified neighbours within 1 km. Anti-ring rules: max 5 vouches per 30 days (enforced under an advisory lock), no vouching back for someone who vouched for you, and residents who were themselves verified by vouches must wait 30 days before vouching. Leaving or being removed from a society revokes society-based verification. | Vouch for others & workers, full trust badge |
 
-Humans review only: **societies** (RWA registration certificate — one review unlocks hundreds of residents, retroactively), flagged content (auto-hidden at 3 reports), and flagged ads. Anti-abuse: society creation requires LOCATION + living within 300 m + no other society within 75 m; vouching is geo-fenced and rate-limited; OTP sends are limited per phone (30 s cooldown, 5/h) and per IP.
+Humans review only: **societies** (RWA registration certificate — one review unlocks hundreds of residents, retroactively), flagged content (auto-hidden at 3 reports), and flagged ads. Anti-abuse: society creation requires LOCATION + living within 300 m + no other society within 75 m; vouching is geo-fenced and rate-limited; OTP sends are limited per phone (60 s cooldown, 5 per hour, 5 attempts per code) and per IP (`OTP_IP_LIMIT_PER_15MIN`, default 10). With Supabase, the end-user IP is forwarded via `Sb-Forwarded-For`, so Supabase's own per-IP limits apply to users, not to our server. This was verified against a real GoTrue server in `tests-integration/`.
 
 ## 4. The cold-start problem
 
@@ -91,9 +109,39 @@ Technical levers built in:
 
 ## 6. Security checklist
 
-helmet, explicit CORS allow-list in production, JSON body limit, global + route rate limits (IPv6-safe keys), zod on every input, parameterised SQL only, image magic-byte sniffing (no SVG/HTML uploads), HMAC'd OTPs/refresh tokens, timing-safe comparisons, Razorpay signature + server-side amount check, nonce-based CSP on the checkout page, and **refuse-to-boot** in production with dev OTP, wildcard CORS or placeholder secrets.
+**Baseline:**
+- helmet, an explicit CORS allow-list in production, a JSON body limit
+- global, per-IP and per-user rate limits (IPv6-safe keys; `TRUST_PROXY` defaults to 0, so `X-Forwarded-For` can't be spoofed)
+- zod on every input; parameterised SQL only, with `ILIKE` wildcards escaped
+- image magic-byte sniffing (no SVG/HTML uploads); media URLs must be https or our own uploads
+- HMAC'd OTPs and refresh tokens; timing-safe comparisons
+- **refuse-to-boot** in production with dev OTP, wildcard CORS or placeholder secrets
+
+**Found by an adversarial audit, then fixed with a regression test each** (`tests/security.test.ts`, 23 tests; 22 failed on the old code and the 23rd was strengthened until it did):
+- **Races are closed:**
+  - State transitions such as join requests and report decisions are conditional `UPDATE … WHERE status = …`.
+  - Ad settlement uses `SELECT … FOR UPDATE`.
+  - The vouch cap and GPS-check counting use `pg_advisory_xact_lock`.
+- **Ads:** impressions are billed only when the viewer is actually eligible for the ad. Clicks require a prior impression. The feed serves at most one ad, and only on page 1. The mobile app reports an impression only after the card is 60% visible for 1 s.
+- **Payments:**
+  - Razorpay checks: the signature `HMAC(order_id|payment_id)`, the amount fetched server-side, and the order's `notes.businessId` must match the wallet being credited.
+  - The credit is idempotent on the payment id.
+  - Status `attempted` returns 202 pending.
+  - The webhook accepts `order.paid` and `payment.captured`.
+  - The wallet is capped and closed-loop.
+- **Privacy:**
+  - Distances and counts are bucketed. Post locations are fuzzed.
+  - Reports and messages require visibility of the target.
+  - Auto-hide counts only reporters who are at least 3 days old or ADDRESS-verified, so brigades of fresh accounts can't silence people.
+  - Address changes are limited to 3 per 30 days, which stops pin-walking.
+- **Compliance (India):**
+  - **DPDP Act 2023:** affirmative consent is recorded (`consentAt`, `consentVersion`) and checked *before* the OTP is consumed. A plain-language notice is readable before sign-up. Account deletion is self-serve.
+  - **IT Rules 2021:** a grievance contact is shown in the app.
+  - **Alerts:** the composer requires confirming that the alert "describes behaviour, not identity". This counters the communal and caste profiling that neighbourhood apps are known for.
 
 ## 7. Known limitations / next steps
+- **Not yet tested on physical devices or with live credentials:** Razorpay live mode, MSG91 SMS delivery and Expo push to real phones. Contract tests mock those services' documented responses, and Supabase Auth was tested against a real GoTrue server.
+- Push receipt ticket ids are held in memory; they are lost on restart (tokens are still pruned on the next send). Persist them if you need guaranteed pruning.
 - Chat uses 4 s polling; upgrade path is a WebSocket gateway (or Supabase Realtime) behind the same endpoints.
 - The background job runner is in-process; with >1 API replica, swap `enqueue()` for BullMQ/pg-boss.
 - Rate-limit store is in-memory; use the Redis store when horizontally scaling.

@@ -5,7 +5,7 @@
  *   App opens checkoutUrl in an auth browser session (expo-web-browser)
  *   Page runs Razorpay Checkout (UPI / cards / netbanking) → POST /pay/complete
  *   Server verifies signature + order amount → credits wallet → redirects to mohalla://wallet
- *   Webhook (payment.captured) credits as a fallback if the user closes the page early.
+ *   Webhook (order.paid or payment.captured) credits as a fallback if the user closes the page early.
  * Crediting is idempotent on the Razorpay payment id, so callback + webhook never double-credit.
  */
 import crypto from 'node:crypto';

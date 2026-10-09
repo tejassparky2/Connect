@@ -68,7 +68,7 @@ Level column: minimum verification level (— = any signed-in user).
 | POST | `/ads/campaigns/:id/{launch,pause,resume,end}` | owner | launch reserves budget; end refunds unspent |
 | GET | `/ads/serve` | — | eligible ads for my home |
 | POST | `/ads/:id/impression` · `/ads/:id/click` | — | deduped per user/day; CPM billing |
-| GET | `/pay/checkout?s=` · POST `/pay/complete` · POST `/pay/webhook` | public (signed) | hosted Razorpay Checkout + `payment.captured` webhook |
+| GET | `/pay/checkout?s=` · POST `/pay/complete` · POST `/pay/webhook` | public (signed) | hosted Razorpay Checkout + `order.paid` / `payment.captured` webhook |
 
 ## Pillar 3 — Societies / RWAs
 All `/:id/...` routes below require an APPROVED membership; **staff** = RWA_ADMIN or RWA_COMMITTEE.
