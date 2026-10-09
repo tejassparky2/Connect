@@ -17,6 +17,8 @@ if [ "${SKIP_WEB_BUILD:-0}" != "1" ]; then
 fi
 
 cd "$ROOT/apps/api"
+# Explicit dev-only secrets: the stack must not depend on a local apps/api/.env (absent in CI).
+JWT_ACCESS_SECRET=e2e-access-secret-0123456789abcdef-e2e JWT_REFRESH_SECRET=e2e-refresh-secret-0123456789abcdef-e2e OTP_SECRET=e2e-otp-secret-0123456789 \
 NODE_ENV=development OTP_IP_LIMIT_PER_15MIN=1000 PORT=$API_PORT DATABASE_URL="$DB_URL" OTP_PROVIDER=dev LOG_LEVEL=warn \
   GPS_CHECKS_REQUIRED=2 GPS_CHECK_MIN_GAP_HOURS=0 PUBLIC_BASE_URL="http://localhost:$API_PORT" UPLOAD_DIR=/tmp/mohalla-e2e-uploads \
   npx tsx src/server.ts > /tmp/mohalla-e2e-api.log 2>&1 &
@@ -24,4 +26,7 @@ echo $! > /tmp/mohalla-e2e-api.pid
 node "$ROOT/e2e/serve.js" "$ROOT/apps/mobile/dist-e2e" "$WEB_PORT" > /tmp/mohalla-e2e-web.log 2>&1 &
 echo $! > /tmp/mohalla-e2e-web.pid
 for i in $(seq 1 30); do curl -sf "http://localhost:$API_PORT/health" >/dev/null && break; sleep 1; done
+if ! curl -sf "http://localhost:$API_PORT/health" >/dev/null; then
+  echo "API failed to start — log follows:" >&2; cat /tmp/mohalla-e2e-api.log >&2; exit 1
+fi
 echo "API :$API_PORT  WEB :$WEB_PORT"
