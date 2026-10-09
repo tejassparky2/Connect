@@ -4,14 +4,16 @@ import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { drainJobs } from './services/jobs';
 import { sweepExpiredCampaigns } from './modules/ads.routes';
+import { checkPushReceipts } from './services/push';
 
 const app = createApp();
 const server = app.listen(env.PORT, '0.0.0.0', () => logger.info(`🏘️  Mohalla Connect API listening on :${env.PORT} (${env.NODE_ENV}, otp=${env.OTP_PROVIDER})`));
 
-// Settle expired ad campaigns every 10 minutes (refund unspent budget).
+// Every 5 minutes: settle expired ad campaigns (refund unspent budget) and check push receipts.
 const sweeper = setInterval(() => {
   sweepExpiredCampaigns().catch((err) => logger.error({ err }, 'Campaign sweep failed'));
-}, 10 * 60_000);
+  checkPushReceipts().catch((err) => logger.error({ err }, 'Push receipt check failed'));
+}, 5 * 60_000);
 sweeper.unref();
 
 async function shutdown(signal: string) {

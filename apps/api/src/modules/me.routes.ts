@@ -6,6 +6,7 @@ import { badRequest, notFound, tooMany } from '../lib/errors';
 import {
   clampRadius,
   bucketCount,
+  countRecentPostsWithin,
   countUsersWithin,
   createWithPoint,
   findNearbyUsers,
@@ -31,6 +32,8 @@ uuidParams(usersRouter, 'id');
 /** Neighbourhood graduates from SEEDED → ACTIVE at this many members (cold-start milestone). */
 const NEIGHBORHOOD_ACTIVE_AT = 25;
 const MAX_ADDRESS_CHANGES_PER_30D = 3;
+/** Stats are counted up to this cap (shown as "1,000+"). */
+const STATS_CAP = 1000;
 
 export async function recountNeighborhood(id: string | null | undefined) {
   if (!id) return;
@@ -246,19 +249,17 @@ meRouter.get('/neighborhood', async (req, res) => {
     ? await prisma.neighborhood.findUnique({ where: { id: user.neighborhoodId }, select: { id: true, name: true, city: true, status: true, memberCount: true } })
     : null;
   const [neighborsInRadius, postsThisWeek] = await Promise.all([
-    countUsersWithin(home, user.feedRadiusM, { verifiedOnly: true }),
-    prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT count(*) AS n FROM posts
-      WHERE status = 'ACTIVE' AND "createdAt" > now() - interval '7 days'
-        AND ST_DWithin(location, ST_SetSRID(ST_MakePoint(${home.lng}::float8, ${home.lat}::float8), 4326)::geography, ${user.feedRadiusM}::float8)`,
+    countUsersWithin(home, user.feedRadiusM, { verifiedOnly: true, cap: STATS_CAP + 1 }),
+    countRecentPostsWithin(home, user.feedRadiusM, 7, STATS_CAP + 1),
   ]);
   res.json({
     neighborhood: hood,
     radiusM: user.feedRadiusM,
     // Bucketed: an exact count + movable centre would be a location oracle.
-    neighborsInRadius: bucketCount(Math.max(0, neighborsInRadius - 1)),
+    neighborsInRadius: bucketCount(Math.min(STATS_CAP, Math.max(0, neighborsInRadius - 1))),
+    neighborsCapped: neighborsInRadius > STATS_CAP,
     approximate: true,
-    postsThisWeek: Number(postsThisWeek[0].n),
+    postsThisWeek: Math.min(STATS_CAP, postsThisWeek),
   });
 });
 

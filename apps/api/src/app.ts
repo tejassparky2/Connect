@@ -33,7 +33,7 @@ export function createApp() {
   app.post('/pay/webhook', ...razorpayWebhook); // raw body for HMAC — before express.json()
   app.use(express.json({ limit: '200kb' }));
   if (!isTest) app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/health' } }));
-  app.use(rateLimit({ windowMs: 60_000, limit: isTest ? 100_000 : 300, standardHeaders: 'draft-7', legacyHeaders: false }));
+  app.use(rateLimit({ windowMs: 60_000, limit: isTest ? 100_000 : env.RATE_LIMIT_PER_MIN, standardHeaders: 'draft-7', legacyHeaders: false }));
 
   app.get('/health', async (_req, res) => {
     try {

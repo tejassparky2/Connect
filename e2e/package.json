@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
+    "autocannon": "^8.0.0",
     "serve-handler": "^6.1.7"
   }
 }

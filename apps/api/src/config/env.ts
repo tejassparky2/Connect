@@ -47,6 +47,8 @@ const schema = z.object({
   VOUCHES_REQUIRED: z.coerce.number().int().min(1).default(2),
   /** Number of reverse-proxy hops in front of the API (0 = none). Wrong values let clients spoof IPs via X-Forwarded-For. */
   TRUST_PROXY: z.string().default('0'),
+  /** Global per-IP request budget per minute. */
+  RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(300),
 });
 
 const parsed = schema.safeParse(process.env);

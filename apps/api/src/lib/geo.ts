@@ -133,13 +133,45 @@ export async function findNeighborhoodForPoint(p: LatLng): Promise<{ id: string;
   return near[0] ?? null;
 }
 
-/** Exact count — SERVER-SIDE ONLY (never return it raw: see bucketCount). */
-export async function countUsersWithin(center: LatLng, radiusM: number, opts: { verifiedOnly?: boolean } = {}): Promise<number> {
+/**
+ * User count within a radius — SERVER-SIDE ONLY (never return it raw: see bucketCount).
+ * `cap` stops counting early (the displayed value is bucketed anyway), keeping this O(cap)
+ * instead of O(everyone in range): 100k residents in range took 80 ms uncapped.
+ */
+export async function countUsersWithin(center: LatLng, radiusM: number, opts: { verifiedOnly?: boolean; cap?: number } = {}): Promise<number> {
   const lvl = opts.verifiedOnly ? Prisma.sql`AND "verificationLevel" IN ('LOCATION', 'ADDRESS')` : Prisma.empty;
+  const pt = pointSql(center);
+  if (opts.cap) {
+    // KNN walk of at most `cap` nearest rows, counting those in range: always an index walk,
+    // independent of PostGIS's (badly wrong for clustered data) selectivity estimates.
+    const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) FILTER (WHERE in_range) AS n FROM (
+        SELECT ST_DWithin("homeLocation", ${pt}, ${radiusM}::float8) AS in_range
+        FROM users
+        WHERE "homeLocation" IS NOT NULL AND "deletedAt" IS NULL AND NOT "isBanned" ${lvl}
+        ORDER BY "homeLocation" <-> ${pt}
+        LIMIT ${opts.cap}
+      ) s`;
+    return Number(rows[0].n);
+  }
   const rows = await prisma.$queryRaw<{ n: bigint }[]>`
     SELECT count(*) AS n FROM users
     WHERE "homeLocation" IS NOT NULL AND "deletedAt" IS NULL AND NOT "isBanned" ${lvl}
-      AND ST_DWithin("homeLocation", ${pointSql(center)}, ${radiusM}::float8)`;
+      AND ST_DWithin("homeLocation", ${pt}, ${radiusM}::float8)`;
+  return Number(rows[0].n);
+}
+
+/** Same KNN-capped counting for recent posts in range. */
+export async function countRecentPostsWithin(center: LatLng, radiusM: number, sinceDays: number, cap: number): Promise<number> {
+  const pt = pointSql(center);
+  const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+    SELECT count(*) FILTER (WHERE in_range) AS n FROM (
+      SELECT ST_DWithin(p.location, ${pt}, ${radiusM}::float8) AS in_range
+      FROM posts p
+      WHERE p.status = 'ACTIVE' AND p."createdAt" > now() - make_interval(days => ${sinceDays}::int)
+      ORDER BY p.location <-> ${pt}
+      LIMIT ${cap}
+    ) s`;
   return Number(rows[0].n);
 }
 
@@ -177,8 +209,9 @@ export interface NearbyUsersCursor {
  *
  * Why this survives 10,000+ users in a 2 km radius:
  *   • ST_DWithin bounds the candidate set using the GIST index on homeLocation.
- *   • ORDER BY homeLocation <-> centre is an index-ordered KNN scan; with LIMIT
- *     Postgres stops after `limit + 1` rows instead of sorting all 10k.
+ *   • ORDER BY homeLocation <-> centre (single key — see knnPage) is an index-ordered
+ *     KNN scan; with LIMIT Postgres stops after a page's worth of rows instead of
+ *     sorting every candidate (verified with EXPLAIN on PostgreSQL 16 and 17).
  *   • The keyset predicate (distance, id) > (cursor.d, cursor.id) makes page N
  *     cost the same as page 1. OFFSET would re-scan all previous pages.
  *   • Only LOCATION/ADDRESS-verified, non-banned, non-deleted, non-blocked
@@ -193,30 +226,33 @@ export async function findNearbyUsers(opts: {
 }): Promise<{ rows: NearbyUserRow[]; nextCursor: NearbyUsersCursor | null }> {
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 100);
   const pt = pointSql(opts.center);
-  const cursorClause = opts.cursor
-    ? Prisma.sql`AND (u."homeLocation" <-> ${pt}, u.id) > (${String(opts.cursor.d)}::float8, ${opts.cursor.id}::uuid)`
-    : Prisma.empty;
-
-  const rows = await prisma.$queryRaw<(Omit<NearbyUserRow, 'distanceM'> & { distance: number })[]>`
-    SELECT u.id, u.name, u."avatarUrl", u."verificationLevel"::text AS "verificationLevel",
-           n.name AS "neighborhoodName",
-           u."homeLocation" <-> ${pt} AS distance
-    FROM users u
-    LEFT JOIN neighborhoods n ON n.id = u."neighborhoodId"
-    WHERE u."homeLocation" IS NOT NULL
-      AND u."deletedAt" IS NULL
-      AND NOT u."isBanned"
-      AND u."verificationLevel" IN ('LOCATION', 'ADDRESS')
-      AND u.id <> ${opts.viewerId}::uuid
-      AND ST_DWithin(u."homeLocation", ${pt}, ${opts.radiusM}::float8)
-      AND NOT EXISTS (
-        SELECT 1 FROM blocks b
-        WHERE (b."blockerId" = ${opts.viewerId}::uuid AND b."blockedId" = u.id)
-           OR (b."blockerId" = u.id AND b."blockedId" = ${opts.viewerId}::uuid)
-      )
-      ${cursorClause}
-    ORDER BY u."homeLocation" <-> ${pt}, u.id
-    LIMIT ${limit + 1}`;
+  const rows = await knnPage<Omit<NearbyUserRow, 'distanceM'> & { distance: number }>({
+    want: limit + 1,
+    maxRadiusM: opts.radiusM,
+    cursor: opts.cursor,
+    query: ({ orderBy, limit: n, floor, range }) => {
+      const dist = Prisma.sql`u."homeLocation" <-> ${pt}`;
+      const inRange = Prisma.sql`ST_DWithin(u."homeLocation", ${pt}, ${opts.radiusM}::float8)`;
+      return prisma.$queryRaw`
+        SELECT u.id, u.name, u."avatarUrl", u."verificationLevel"::text AS "verificationLevel",
+               n.name AS "neighborhoodName", ${dist} AS distance, ${inRange} AS "inRange"
+        FROM users u
+        LEFT JOIN neighborhoods n ON n.id = u."neighborhoodId"
+        WHERE u."homeLocation" IS NOT NULL
+          AND u."deletedAt" IS NULL
+          AND NOT u."isBanned"
+          AND u."verificationLevel" IN ('LOCATION', 'ADDRESS')
+          AND u.id <> ${opts.viewerId}::uuid
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b."blockerId" = ${opts.viewerId}::uuid AND b."blockedId" = u.id)
+               OR (b."blockerId" = u.id AND b."blockedId" = ${opts.viewerId}::uuid)
+          )
+          ${range(inRange)} ${floor(dist, Prisma.sql`u.id`)}
+        ORDER BY ${orderBy(dist, Prisma.sql`u.id`)}
+        LIMIT ${n}`;
+    },
+  });
 
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
@@ -309,16 +345,8 @@ export async function queryFeedIds(opts: {
 }
 
 /** How many live posts exist within a radius — used for adaptive cold-start radius. */
-export async function countPostsWithin(center: LatLng, radiusM: number, sinceDays = 30): Promise<number> {
-  const rows = await prisma.$queryRaw<{ n: bigint }[]>`
-    SELECT count(*) AS n FROM (
-      SELECT 1 FROM posts p
-      WHERE p.status = 'ACTIVE'
-        AND p."createdAt" > now() - make_interval(days => ${sinceDays}::int)
-        AND ST_DWithin(p.location, ${pointSql(center)}, ${radiusM}::float8)
-      LIMIT 50
-    ) s`;
-  return Number(rows[0].n);
+export function countPostsWithin(center: LatLng, radiusM: number, sinceDays = 30): Promise<number> {
+  return countRecentPostsWithin(center, radiusM, sinceDays, 50);
 }
 
 /** Active high-severity alerts near the user in the last 24h (pinned above the feed). */
@@ -356,17 +384,21 @@ export async function queryNearbyBusinessIds(opts: {
   const pt = pointSql(opts.center);
   const cat = opts.category ? Prisma.sql`AND b.category = ${opts.category}::"BusinessCategory"` : Prisma.empty;
   const q = opts.q ? Prisma.sql`AND (b.name ILIKE ${'%' + likeEscape(opts.q) + '%'} OR b.description ILIKE ${'%' + likeEscape(opts.q) + '%'})` : Prisma.empty;
-  const cur = opts.cursor
-    ? Prisma.sql`AND (b.location <-> ${pt}, b.id) > (${String(opts.cursor.d)}::float8, ${opts.cursor.id}::uuid)`
-    : Prisma.empty;
-  return prisma.$queryRaw<{ id: string; distance: number }[]>`
-    SELECT b.id, b.location <-> ${pt} AS distance
-    FROM businesses b
-    WHERE b.status = 'ACTIVE'
-      AND ST_DWithin(b.location, ${pt}, ${opts.radiusM}::float8)
-      ${cat} ${q} ${cur}
-    ORDER BY b.location <-> ${pt}, b.id
-    LIMIT ${opts.limit}`;
+  return knnPage<{ id: string; distance: number }>({
+    want: opts.limit,
+    maxRadiusM: opts.radiusM,
+    cursor: opts.cursor,
+    query: ({ orderBy, limit: n, floor, range }) => {
+      const dist = Prisma.sql`b.location <-> ${pt}`;
+      const inRange = Prisma.sql`ST_DWithin(b.location, ${pt}, ${opts.radiusM}::float8)`;
+      return prisma.$queryRaw`
+        SELECT b.id, ${dist} AS distance, ${inRange} AS "inRange"
+        FROM businesses b
+        WHERE b.status = 'ACTIVE' ${cat} ${q} ${range(inRange)} ${floor(dist, Prisma.sql`b.id`)}
+        ORDER BY ${orderBy(dist, Prisma.sql`b.id`)}
+        LIMIT ${n}`;
+    },
+  });
 }
 
 /** Workers whose own service radius covers the viewer (not just "near me"). */
@@ -380,19 +412,22 @@ export async function queryNearbyProviderIds(opts: {
   const pt = pointSql(opts.center);
   const skill = opts.skill ? Prisma.sql`AND ${opts.skill}::"ServiceSkill" = ANY(s.skills)` : Prisma.empty;
   const q = opts.q ? Prisma.sql`AND s.name ILIKE ${'%' + likeEscape(opts.q) + '%'}` : Prisma.empty;
-  const cur = opts.cursor
-    ? Prisma.sql`AND (s.location <-> ${pt}, s.id) > (${String(opts.cursor.d)}::float8, ${opts.cursor.id}::uuid)`
-    : Prisma.empty;
-  // 20 km is the max serviceRadiusM, so it's a safe index-friendly outer bound.
-  return prisma.$queryRaw<{ id: string; distance: number }[]>`
-    SELECT s.id, s.location <-> ${pt} AS distance
-    FROM service_providers s
-    WHERE s.status = 'ACTIVE'
-      AND ST_DWithin(s.location, ${pt}, 20000)
-      AND ST_DWithin(s.location, ${pt}, s."serviceRadiusM")
-      ${skill} ${q} ${cur}
-    ORDER BY s.location <-> ${pt}, s.id
-    LIMIT ${opts.limit}`;
+  // 20 km is the max serviceRadiusM, so nothing beyond it can be in range.
+  return knnPage<{ id: string; distance: number }>({
+    want: opts.limit,
+    maxRadiusM: 20000,
+    cursor: opts.cursor,
+    query: ({ orderBy, limit: n, floor, range }) => {
+      const dist = Prisma.sql`s.location <-> ${pt}`;
+      const inRange = Prisma.sql`ST_DWithin(s.location, ${pt}, s."serviceRadiusM")`;
+      return prisma.$queryRaw`
+        SELECT s.id, ${dist} AS distance, ${inRange} AS "inRange"
+        FROM service_providers s
+        WHERE s.status = 'ACTIVE' ${skill} ${q} ${range(inRange)} ${floor(dist, Prisma.sql`s.id`)}
+        ORDER BY ${orderBy(dist, Prisma.sql`s.id`)}
+        LIMIT ${n}`;
+    },
+  });
 }
 
 /** Societies near a point (for "find your society" during onboarding). */
@@ -459,4 +494,69 @@ export async function createWithPoint<T extends { id: string }>(
     if (opts.after) await opts.after(tx, row);
     return row;
   });
+}
+
+// ─────────────────────────── KNN keyset pagination helper ───────────────────────────
+
+/** Extra rows fetched beyond the page to absorb exact-distance ties at the page boundary. */
+const KNN_TIE_BUFFER = 64;
+
+type SqlFrag = Prisma.Sql;
+export interface KnnParts {
+  /** ORDER BY expression list. */
+  orderBy: (dist: SqlFrag, id: SqlFrag) => SqlFrag;
+  /** Row cap. */
+  limit: number;
+  /** Cursor predicate (AND …) or empty. */
+  floor: (dist: SqlFrag, id: SqlFrag) => SqlFrag;
+  /** Radius predicate (AND …) — empty in the fast path, where rows report `inRange` instead. */
+  range: (inRange: SqlFrag) => SqlFrag;
+}
+
+/**
+ * Nearest-first keyset page that is ALWAYS an index-ordered KNN walk.
+ *
+ * Measured on PostgreSQL 16 with 100k users inside 2 km:
+ *   • `WHERE ST_DWithin(..) ORDER BY dist, id` → Seq Scan + sort (≈620 ms): PostGIS
+ *     estimates ~10 matching rows when all 100k match, so the planner picks a seq scan,
+ *     and two-key ordering can't use the GiST ordering before PG17 anyway.
+ *   • `ORDER BY dist LIMIT n` with no radius predicate → GiST KNN walk, stops after n rows.
+ * So the fast path orders by distance alone, computes `inRange` (exact spheroid
+ * ST_DWithin) per row instead of filtering on it, applies the (dist, id) keyset in JS,
+ * and stops once rows are past the radius. If exact-distance ties overflow the buffer,
+ * it falls back to the exact (slower) query, so results are always correct.
+ */
+async function knnPage<T extends { id: string; distance: number }>(opts: {
+  want: number;
+  maxRadiusM: number;
+  cursor?: { d: number; id: string } | null;
+  query: (p: KnnParts) => Promise<(T & { inRange: boolean })[]>;
+}): Promise<T[]> {
+  const c = opts.cursor;
+  const after = (r: T) => !c || r.distance > c.d || (r.distance === c.d && r.id > c.id);
+  const byKey = (a: T, b: T) => a.distance - b.distance || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const strip = ({ inRange: _i, ...r }: T & { inRange: boolean }) => r as unknown as T;
+  const innerLimit = opts.want + KNN_TIE_BUFFER;
+
+  const fast = await opts.query({
+    orderBy: (dist) => dist,
+    limit: innerLimit,
+    floor: (dist) => (c ? Prisma.sql`AND ${dist} >= ${String(c.d)}::float8` : Prisma.empty),
+    range: () => Prisma.empty,
+  });
+  const page = fast.filter((r) => r.inRange && after(r)).sort(byKey);
+  const lastFetched = fast[fast.length - 1];
+  // `<->` is sphere distance; ST_DWithin is spheroid (≤0.5% apart) — keep a 1% margin.
+  const exhausted = fast.length < innerLimit || (lastFetched && lastFetched.distance > opts.maxRadiusM * 1.01);
+  const fullAndTiesSafe = page.length >= opts.want && lastFetched.distance > page[opts.want - 1].distance;
+  if (exhausted || fullAndTiesSafe) return page.slice(0, opts.want).map(strip);
+
+  // Rare (huge exact-distance tie, or most nearby rows out of range): exact query.
+  const exact = await opts.query({
+    orderBy: (dist, id) => Prisma.sql`${dist}, ${id}`,
+    limit: opts.want,
+    floor: (dist, id) => (c ? Prisma.sql`AND (${dist}, ${id}) > (${String(c.d)}::float8, ${c.id}::uuid)` : Prisma.empty),
+    range: (inRange) => Prisma.sql`AND ${inRange}`,
+  });
+  return exact.map(strip);
 }

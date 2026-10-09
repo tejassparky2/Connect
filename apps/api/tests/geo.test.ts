@@ -3,15 +3,15 @@ import { findNearbyUsers, findNeighborhoodForPoint, streamUserIdsWithin, countUs
 import { bulkUsers, createNeighborhood, HSR, KORA, login, offset, prisma, resetDb, setHome } from './helpers';
 
 /**
- * The scale scenario from the brief: 10,000 users inside a 2 km radius.
- * We seed 10k users in 2 km + 2k in 2–6 km and assert correctness, index use and latency.
+ * The scale scenario from the brief (10,000 users inside 2 km) — tested at 10× that:
+ * 100k users in 2 km + 2k decoys in 2–6 km. Asserts correctness, index-ordered KNN and latency.
  */
 describe('PostGIS: nearby-user queries at scale', () => {
   let viewerId: string;
 
   beforeAll(async () => {
     await resetDb();
-    await bulkUsers(10_000, HSR, 2000);
+    await bulkUsers(100_000, HSR, 2000);
     // A ring of users 2–6 km away (must never appear in a 2 km query).
     await prisma.$executeRaw`
       INSERT INTO users (id, phone, name, "verificationLevel", "homeLocation", "updatedAt")
@@ -25,8 +25,8 @@ describe('PostGIS: nearby-user queries at scale', () => {
   });
 
   it('counts exactly the users inside the radius', async () => {
-    expect(await countUsersWithin(HSR, 2000)).toBe(10_000);
-    expect(await countUsersWithin(HSR, 7000)).toBe(12_000);
+    expect(await countUsersWithin(HSR, 2000)).toBe(100_000);
+    expect(await countUsersWithin(HSR, 7000)).toBe(102_000);
   });
 
   it('returns nearest-first pages with bucketed distances, and keyset pagination never repeats or skips', async () => {
@@ -50,19 +50,20 @@ describe('PostGIS: nearby-user queries at scale', () => {
     expect(seen.size).toBe(await countUsersWithin(HSR, 300));
   });
 
-  it('uses the GIST index (no sequential scan) for radius + KNN', async () => {
+  it('is an index-ordered KNN walk (no Seq Scan, no full sort) even when every row is in range', async () => {
     const plan = await prisma.$queryRawUnsafe<{ 'QUERY PLAN': string }[]>(`
-      EXPLAIN SELECT id FROM users
-      WHERE "homeLocation" IS NOT NULL
-        AND ST_DWithin("homeLocation", ST_SetSRID(ST_MakePoint(${HSR.lng}, ${HSR.lat}), 4326)::geography, 2000)
+      EXPLAIN SELECT id, ST_DWithin("homeLocation", ST_SetSRID(ST_MakePoint(${HSR.lng}, ${HSR.lat}), 4326)::geography, 2000) AS in_range
+      FROM users
+      WHERE "homeLocation" IS NOT NULL AND "deletedAt" IS NULL AND NOT "isBanned"
       ORDER BY "homeLocation" <-> ST_SetSRID(ST_MakePoint(${HSR.lng}, ${HSR.lat}), 4326)::geography
-      LIMIT 31`);
+      LIMIT 95`);
     const text = plan.map((p) => p['QUERY PLAN']).join('\n');
-    expect(text).toMatch(/users_homeLocation_idx/);
-    expect(text).not.toMatch(/Seq Scan on users/);
+    expect(text).toMatch(/Index Scan using "?users_homeLocation_idx"?/);
+    expect(text).toMatch(/Order By: \("homeLocation" <->/);
+    expect(text).not.toMatch(/Seq Scan|Sort Method/);
   });
 
-  it('first page of 30 nearest out of 10k answers in well under 100 ms', async () => {
+  it('first page of 30 nearest out of 100k answers in well under 100 ms', async () => {
     await findNearbyUsers({ center: HSR, radiusM: 2000, viewerId, limit: 30 }); // warm
     const t0 = performance.now();
     for (let i = 0; i < 10; i++) await findNearbyUsers({ center: offset(HSR, i * 50, i * 30), radiusM: 2000, viewerId, limit: 30 });
@@ -78,8 +79,28 @@ describe('PostGIS: nearby-user queries at scale', () => {
       batch.forEach((id) => all.add(id));
       batches++;
     }
-    expect(all.size).toBe(10_000);
-    expect(batches).toBe(7);
+    expect(all.size).toBe(100_000);
+    expect(batches).toBe(67);
+  });
+
+  it('exact-distance ties larger than the buffer still paginate correctly (fallback path)', async () => {
+    const spot = offset(HSR, 3000, 3000); // outside the bulk disc
+    await prisma.$executeRaw`
+      INSERT INTO users (id, phone, "verificationLevel", "homeLocation", "updatedAt")
+      SELECT gen_random_uuid(), '+9150' || lpad(g::text, 8, '0'), 'LOCATION',
+             ST_SetSRID(ST_MakePoint(${spot.lng}::float8, ${spot.lat}::float8), 4326)::geography, now()
+      FROM generate_series(1, 150) g`; // 150 users at the IDENTICAL point
+    const seen = new Set<string>();
+    let cursor = null;
+    do {
+      const r: Awaited<ReturnType<typeof findNearbyUsers>> = await findNearbyUsers({ center: spot, radiusM: 50, viewerId, limit: 40, cursor });
+      for (const row of r.rows) {
+        expect(seen.has(row.id)).toBe(false);
+        seen.add(row.id);
+      }
+      cursor = r.nextCursor;
+    } while (cursor);
+    expect(seen.size).toBe(150);
   });
 
   it('excludes PHONE-only users, banned users and blocked users from the directory', async () => {
