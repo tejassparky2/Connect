@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Platform, Pressable, Text, TextInput, View, type PressableProps, type TextInputProps } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons'; // direct import: the barrel bundles every icon font (~2 MB)
 import { cssInterop } from 'nativewind';
 import { initials } from '@/lib/format';
 import type { Level } from '@/lib/types';
