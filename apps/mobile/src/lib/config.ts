@@ -45,7 +45,12 @@ export const getApiUrl = () => override ?? DEFAULT_URL;
 export function normalizeServerUrl(input: string): string | null {
   let s = input.trim().replace(/\/+$/, '');
   if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
+  if (!/^https?:\/\//i.test(s)) {
+    // Bare LAN IPs / localhost → http (a dev API on a laptop); domain names → https (a hosted API).
+    const host = s.split(/[/:]/)[0].toLowerCase();
+    const local = host === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[');
+    s = `${local ? 'http' : 'https'}://${s}`;
+  }
   // scheme://host[:port] only — host is a name, IPv4 or [IPv6]; any path is dropped.
   const m = /^(https?):\/\/(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d{1,5}))?(?:\/.*)?$/i.exec(s);
   if (!m || (m[3] && Number(m[3]) > 65535)) return null;
@@ -68,4 +73,18 @@ export async function setApiUrlOverride(url: string | null) {
   override = url;
   if (url) await secureStorage.set(OVERRIDE_KEY, url);
   else await secureStorage.remove(OVERRIDE_KEY);
+}
+
+/**
+ * Fire-and-forget GET /health at launch. Free hosting tiers (e.g. Render) sleep when idle and take
+ * ~1 min to wake; starting that now means the server is usually up by the time the user has typed
+ * their number.
+ */
+export function warmUpServer() {
+  if (!hasUsableServer()) return;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 90_000);
+  fetch(`${getApiUrl()}/health`, { signal: ctrl.signal })
+    .catch(() => undefined)
+    .finally(() => clearTimeout(timer));
 }

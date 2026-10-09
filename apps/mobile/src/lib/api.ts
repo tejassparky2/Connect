@@ -20,7 +20,7 @@ export class ApiError extends Error {
 let refreshing: Promise<boolean> | null = null;
 
 /** Requests never hang: an unreachable server can otherwise leave a spinner up for minutes. */
-const TIMEOUT_MS = 20_000;
+const TIMEOUT_MS = 30_000; // generous: a sleeping free-tier server needs time to wake
 const UPLOAD_TIMEOUT_MS = 120_000; // images on slow mobile data
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms: number): Promise<Response> {
@@ -84,7 +84,7 @@ async function request<T>(method: Method, path: string, body?: unknown, retry = 
       0,
       'NETWORK',
       SERVER_SWITCH_ENABLED
-        ? `Can't reach the server at ${getApiUrl().replace(/^https?:\/\//, '')}. Check it's running, or change it under "Server" on the welcome screen.`
+        ? `Can't reach the server at ${getApiUrl().replace(/^https?:\/\//, '')}. If it was asleep it may be waking up — try again in a minute, or change it under "Server" on the welcome screen.`
         : 'No internet connection. Please check your network and try again.',
     );
   }

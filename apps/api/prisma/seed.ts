@@ -37,6 +37,11 @@ async function setGeo(table: string, column: string, id: string, p: P, fuzzed = 
 }
 
 async function main() {
+  // Hosted demo: seed on first boot only. Without this flag the seed RESETS the database.
+  if (process.env.SEED_ONLY_IF_EMPTY === 'true' && (await prisma.user.count()) > 0) {
+    console.log('🌱 Database already has data — skipping demo seed.');
+    return;
+  }
   console.log('🧹 Resetting data…');
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations', 'spatial_ref_sys')`;

@@ -19,3 +19,4 @@ e2e/screenshots/
 e2e/test-results/
 e2e/node_modules/
 apps/mobile/dist-e2e/
+apps/api/dist-seed/

@@ -10,7 +10,13 @@ const schema = z.object({
   // No default on purpose: an unset NODE_ENV must not silently enable dev OTP/payments.
   NODE_ENV: z.enum(['development', 'test', 'production']),
   PORT: z.coerce.number().int().positive().default(4000),
-  PUBLIC_BASE_URL: z.string().url().default('http://localhost:4000'),
+  // Render (and similar hosts) expose the service's public URL; use it when PUBLIC_BASE_URL isn't set.
+  PUBLIC_BASE_URL: z.string().url().default(process.env.RENDER_EXTERNAL_URL || 'http://localhost:4000'),
+  /**
+   * DEMO ONLY: allow the dev OTP provider (code shown in the app, no SMS) in production, so a public demo
+   * works without an SMS gateway. Anyone can then sign in as ANY phone number — never use with real users.
+   */
+  DEMO_MODE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   CORS_ORIGINS: z.string().default('*'),
   LOG_LEVEL: z.string().default('info'),
   DATABASE_URL: z.string().min(1),
@@ -67,7 +73,7 @@ export const isTest = env.NODE_ENV === 'test';
 // Production safety rails — refuse to boot with insecure settings.
 if (isProd) {
   const problems: string[] = [];
-  if (env.OTP_PROVIDER === 'dev') problems.push('OTP_PROVIDER=dev is not allowed in production');
+  if (env.OTP_PROVIDER === 'dev' && !env.DEMO_MODE) problems.push('OTP_PROVIDER=dev is not allowed in production (set DEMO_MODE=true only for a public demo)');
   if (env.CORS_ORIGINS.trim() === '*') problems.push('CORS_ORIGINS must be an explicit allow-list in production');
   if (/change-me/i.test(env.JWT_ACCESS_SECRET + env.JWT_REFRESH_SECRET + env.OTP_SECRET))
     problems.push('JWT/OTP secrets still contain placeholder values');
@@ -78,4 +84,7 @@ if (isProd) {
     console.error('❌ Refusing to start:\n  ' + problems.join('\n  '));
     process.exit(1);
   }
+  if (env.DEMO_MODE && env.OTP_PROVIDER === 'dev')
+    // eslint-disable-next-line no-console
+    console.warn('⚠️  DEMO_MODE: OTP codes are returned to the app and no SMS is sent. Anyone can sign in as any number. Demo data only.');
 }

@@ -13,6 +13,8 @@ afterEach(async () => {
 test('normalizeServerUrl accepts bare IP:port and strips paths; rejects junk', () => {
   expect(normalizeServerUrl('192.168.1.20:4000')).toBe('http://192.168.1.20:4000');
   expect(normalizeServerUrl(' HTTPS://Api.Example.in/v1/ ')).toBe('https://api.example.in');
+  expect(normalizeServerUrl('mohalla-connect-api.onrender.com')).toBe('https://mohalla-connect-api.onrender.com');
+  expect(normalizeServerUrl('localhost:4000')).toBe('http://localhost:4000');
   expect(normalizeServerUrl('http://[fe80::1]:4000')).toBe('http://[fe80::1]:4000');
   expect(normalizeServerUrl('')).toBeNull();
   expect(normalizeServerUrl('not a url')).toBeNull();
@@ -85,7 +87,7 @@ describe('sideloaded test build (release, no server saved yet)', () => {
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/phone'));
   });
 
-  test('a request to an unreachable server fails after 20 s instead of spinning forever', async () => {
+  test('a request to an unreachable server fails after 30 s instead of spinning forever', async () => {
     jest.useFakeTimers();
     globalThis.fetch = jest.fn(
       (_url: unknown, init?: RequestInit) =>
@@ -93,7 +95,7 @@ describe('sideloaded test build (release, no server saved yet)', () => {
     ) as unknown as typeof fetch;
     const p = api.post('/auth/otp/request', { phone: '+919876543210' });
     const assertion = expect(p).rejects.toMatchObject({ code: 'NETWORK', message: expect.stringMatching(/Can't reach the server/) });
-    jest.advanceTimersByTime(20_000);
+    jest.advanceTimersByTime(30_000);
     await assertion;
   });
 });

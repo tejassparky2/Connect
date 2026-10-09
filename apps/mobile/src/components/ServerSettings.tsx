@@ -9,14 +9,14 @@ import { Button, Field, Icon } from '@/components/ui';
 /** Checks that `url` is a Mohalla Connect API: GET /health → { ok: true }. */
 async function probe(url: string): Promise<string | null> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 6000);
+  const timer = setTimeout(() => ctrl.abort(), 75_000); // a sleeping free-tier server can take ~1 min to wake
   try {
     const res = await fetch(`${url}/health`, { signal: ctrl.signal });
     const body = (await res.json().catch(() => null)) as { ok?: boolean } | null;
     if (res.ok && body?.ok) return null;
     return `The server answered, but it isn't a healthy Mohalla Connect API (HTTP ${res.status}).`;
   } catch {
-    return "Couldn't reach that address. Check the phone and computer are on the same Wi-Fi, the API is running, and port 4000 is allowed through the firewall.";
+    return "Couldn't reach that address. For a hosted server, check the URL. For a computer on your Wi-Fi, check the API is running and port 4000 is allowed through the firewall.";
   } finally {
     clearTimeout(timer);
   }
@@ -70,9 +70,9 @@ export function ServerSettings() {
       <BottomSheet visible={open} onClose={() => setOpen(false)} testID="server-sheet">
         <Text className="text-xl font-extrabold text-ink-900">{required ? 'First, connect to your server' : 'Server address'}</Text>
         <Text className="mb-4 mt-1 text-sm leading-5 text-ink-500">
-          This test build talks to your own Mohalla Connect API. Run it on your computer and enter the computer's Wi-Fi IP address and port.
+          Enter your Mohalla Connect server: a hosted address like mohalla-connect-api.onrender.com, or your computer's Wi-Fi IP and port (192.168.1.20:4000). A sleeping server can take a minute to answer.
         </Text>
-        <Field testID="server-url" label="API address" placeholder="192.168.1.20:4000" value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" error={error} />
+        <Field testID="server-url" label="API address" placeholder="mohalla-connect-api.onrender.com" value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" error={error} />
         <View className="flex-row">
           <Button title="Reset" variant="secondary" className="mr-3" onPress={async () => { await setApiUrlOverride(null); const d = getApiUrl(); setCurrent(d); setValue(d); setError(null); }} />
           <Button testID="server-save" title="Test & save" className="flex-1" loading={busy} onPress={save} />

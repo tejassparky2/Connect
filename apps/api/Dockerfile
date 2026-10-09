@@ -15,13 +15,15 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/dist-seed ./apps/api/dist-seed
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 WORKDIR /app/apps/api
 RUN mkdir -p uploads && chown -R node:node /app/apps/api
 USER node
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 # Apply pending migrations, then start. (For multi-replica deploys run migrations as a separate release step.)
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "-c", "node ../../node_modules/prisma/build/index.js migrate deploy && node dist/server.js"]
+# SEED_DEMO_DATA=true (hosted demo): load the Bengaluru demo data on first boot only (skipped once users exist).
+CMD ["sh", "-c", "node ../../node_modules/prisma/build/index.js migrate deploy && if [ \"$SEED_DEMO_DATA\" = true ]; then SEED_ONLY_IF_EMPTY=true node dist-seed/seed.js; fi && exec node dist/server.js"]

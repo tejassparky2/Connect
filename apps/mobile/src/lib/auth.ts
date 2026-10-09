@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { loadApiUrlOverride } from './config';
+import { loadApiUrlOverride, warmUpServer } from './config';
 import { secureStorage } from './storage';
 import type { Me } from './types';
 
@@ -33,6 +33,7 @@ export const useAuth = create<AuthState>((set) => ({
   me: null,
   hydrate: async () => {
     await loadApiUrlOverride(); // before any request (test builds may point at a custom server)
+    warmUpServer();
     try {
       const [accessToken, refreshToken] = await Promise.all([secureStorage.get(ACCESS), secureStorage.get(REFRESH)]);
       set({ accessToken, refreshToken, status: refreshToken ? 'signedIn' : 'signedOut' });
