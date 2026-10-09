@@ -31,9 +31,12 @@ let gw;
 let api;
 
 before(async () => {
-  // Re-runnable: clear this test's cooldown state (the GoTrue test numbers are fixed).
+  // Re-runnable from a clean slate (the GoTrue test numbers are fixed): clear cooldowns AND
+  // users, so every run exercises the brand-new-user path exactly as a fresh CI database does.
+  const phones = ['+919900012345', '+919900054321'];
   const db = new PrismaClient();
-  await db.otpChallenge.deleteMany({ where: { phone: { in: ['+919900012345', '+919900054321'] } } });
+  await db.otpChallenge.deleteMany({ where: { phone: { in: phones } } });
+  await db.user.deleteMany({ where: { phone: { in: phones } } });
   await db.$disconnect();
 
   gw = http.createServer(async (req, res) => {
@@ -86,8 +89,8 @@ test('send OTP via Supabase never leaks a devCode and forwards the end-user IP',
 });
 
 test('wrong OTP → 401 from our API (GoTrue says 403 otp_expired)', async () => {
-  const r = await post('/auth/otp/verify', { phone: '9900012345', code: '000000' });
-  assert.equal(r.status, 401);
+  const r = await post('/auth/otp/verify', { phone: '9900012345', code: '000000', consent: true });
+  assert.equal(r.status, 401, await r.text());
 });
 
 test('correct OTP → our own session; user linked to the Supabase user id; phone normalised to E.164', async () => {
