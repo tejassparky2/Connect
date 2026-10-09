@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Icon, type IconName } from '@/components/ui';
+import { ServerSettings } from '@/components/ServerSettings';
 
 const PILLARS: { icon: IconName; title: string; body: string }[] = [
   { icon: 'people', title: 'Your verified neighbours', body: 'A private feed for people who actually live within 2–5 km of you.' },
@@ -40,6 +41,7 @@ export default function Welcome() {
       <View className="px-6" style={{ paddingBottom: insets.bottom + 20 }}>
         <Button testID="get-started" title="Get started" size="lg" onPress={() => router.push('/phone')} />
         <Text className="mt-3 text-center text-xs text-ink-400">Login with your mobile number · No passwords</Text>
+        <ServerSettings />
       </View>
     </View>
   );

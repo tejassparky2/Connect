@@ -1,4 +1,4 @@
-import { API_URL } from './config';
+import { getApiUrl, SERVER_SWITCH_ENABLED } from './config';
 import { useAuth } from './auth';
 
 export class ApiError extends Error {
@@ -26,7 +26,7 @@ async function refreshTokens(): Promise<boolean> {
     const { refreshToken, setTokens, signOut } = useAuth.getState();
     if (!refreshToken) return false;
     try {
-      const res = await fetch(`${API_URL}/v1/auth/refresh`, {
+      const res = await fetch(`${getApiUrl()}/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -56,7 +56,7 @@ async function request<T>(method: Method, path: string, body?: unknown, retry = 
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/v1${path}`, {
+    res = await fetch(`${getApiUrl()}/v1${path}`, {
       method,
       headers: {
         Accept: 'application/json',
@@ -66,7 +66,13 @@ async function request<T>(method: Method, path: string, body?: unknown, retry = 
       body: body == null ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, 'NETWORK', 'No internet connection. Please check your network and try again.');
+    throw new ApiError(
+      0,
+      'NETWORK',
+      SERVER_SWITCH_ENABLED
+        ? `Can't reach the server at ${getApiUrl().replace(/^https?:\/\//, '')}. Check it's running, or change it under "Server" on the welcome screen.`
+        : 'No internet connection. Please check your network and try again.',
+    );
   }
 
   if (res.status === 401 && retry && useAuth.getState().refreshToken && !path.startsWith('/auth/')) {
